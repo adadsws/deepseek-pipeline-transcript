@@ -1,0 +1,76 @@
+# GUI 对照配置公开模板；不包含任何真实 API Key。
+[language.video]
+source = "auto"
+target = "en-US"
+
+[transcription]
+engine = "bijian"
+output_format = "SRT"
+model = "tiny"
+device = "cuda"
+program = "Faster-Whisper-XXL/faster-whisper-xxl.exe"
+vad_filter = true
+vad_method = "silero_v4"
+vad_threshold = 0.4
+voice_extraction = false
+one_word = true
+word_timestamps = false
+prompt = ""
+audio_track_index = -1
+
+[translation]
+enabled = false
+translator = "bing"
+llm_service = "openai"
+api_base = "https://api.openai.com/v1"
+model = "gpt-4o-mini"
+reflect = false
+optimize = false
+split = false
+max_words_cjk = 28
+max_words_english = 20
+custom_prompt = ""
+thread_num = 10
+batch_size = 10
+deeplx_endpoint = ""
+
+[translation_batching]
+max_in_flight = 0
+video_concurrency = 0
+max_input_tokens = 0
+max_output_tokens = 0
+output_reserve_ratio = 0.0
+reasoning_effort = ""
+
+[output]
+subtitle_layout = "target-above"
+synthesize_video = true
+soft_subtitle = false
+video_quality = "medium"
+use_subtitle_style = false
+
+[intro_subtitle]
+enabled = false
+text = ""
+duration_seconds = 3.0
+
+[input]
+video_extensions = []
+skip_existing_srt = false
+
+[interaction]
+confirm_after_scan = false
+pause_after_one_shot = false
+
+[gpu_gate]
+enabled = false
+index = -1
+busy_threshold_percent = 0
+poll_interval_seconds = 0.0
+query_timeout_seconds = 0.0
+required_low_readings_after_busy = 0
+
+[project_features]
+request_level_auto_retry = false
+video_level_translation = false
+asr_consecutive_duplicate_cleanup = false

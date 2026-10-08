@@ -1,0 +1,14 @@
+# 本机大型运行资源清单；真实二进制和模型不纳入 Git。
+[bin]
+source = "https://modelscope.cn/models/bkfengg/whisper-cpp/resolve/master/Faster-Whisper-XXL_r245.2_windows.7z"
+archive_name = "faster-whisper-gpu.7z"
+archive_sha256 = "313A6C1DC97215BD6A076DA8743FF18768BFE619F3915464FC2A077821051A38"
+archive_bytes = 1453457746
+executable = "Faster-Whisper-XXL/faster-whisper-xxl.exe"
+executable_sha256 = "C81157FA0D1A7435AE7EE4165921B078146ABB015A2B833EA1161924CA0DF9EE"
+
+[models.medium]
+source = "https://huggingface.co/Systran/faster-whisper-medium"
+directory = "faster-whisper-medium"
+model_sha256 = "9B45E1009DCC4AB601EFF815B61D80E60CE3FD8C74C1A14F4A282258286B51AE"
+model_bytes = 1527906378

@@ -1,0 +1,82 @@
+# GUI 对照层：字段与 batch/settings.toml 完全成对，值保留迁移前 GUI 实际设置。
+# 最常修改：视频语言
+[language.video]
+source = "ja"
+target = "zh-Hans"
+
+[transcription]
+engine = "faster-whisper"
+output_format = "SRT"
+model = "medium"
+device = "cuda"
+program = "Faster-Whisper-XXL/faster-whisper-xxl.exe"
+vad_filter = true
+vad_method = "silero_v5"
+vad_threshold = 0.4
+voice_extraction = false
+one_word = false
+word_timestamps = false
+prompt = ""
+# GUI 由每个视频的音轨菜单选择，-1 表示不使用项目级固定值。
+audio_track_index = -1
+
+[translation]
+enabled = true
+translator = "llm"
+llm_service = "deepseek"
+api_base = "https://api.deepseek.com/v1"
+model = "deepseek-flash"
+reflect = false
+optimize = false
+split = false
+max_words_cjk = 28
+max_words_english = 20
+custom_prompt = ""
+thread_num = 10
+batch_size = 10
+deeplx_endpoint = ""
+
+# 批处理新增能力在 GUI 中关闭；GUI 继续使用上游逐句分块。
+[translation_batching]
+max_in_flight = 0
+video_concurrency = 0
+max_input_tokens = 0
+max_output_tokens = 0
+output_reserve_ratio = 0.0
+reasoning_effort = ""
+
+[output]
+subtitle_layout = "target-above"
+synthesize_video = false
+soft_subtitle = true
+video_quality = "low"
+use_subtitle_style = false
+
+# GUI 当前不使用自动署名；保留与 batch 成对的默认关闭配置。
+[intro_subtitle]
+enabled = false
+text = ""
+duration_seconds = 3.0
+
+# GUI 不使用批处理扫描策略。
+[input]
+video_extensions = []
+skip_existing_srt = false
+
+[interaction]
+confirm_after_scan = false
+pause_after_one_shot = false
+
+[gpu_gate]
+enabled = false
+index = -1
+busy_threshold_percent = 0
+poll_interval_seconds = 0.0
+query_timeout_seconds = 0.0
+required_low_readings_after_busy = 0
+
+# GUI 对照层关闭批处理实际读取的项目功能开关。
+[project_features]
+request_level_auto_retry = false
+video_level_translation = false
+asr_consecutive_duplicate_cleanup = false

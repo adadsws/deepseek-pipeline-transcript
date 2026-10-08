@@ -1,0 +1,125 @@
+# 批处理覆盖层：只保存相对 GUI 改写的设置和本项目新增功能的实际状态。
+# 最常修改：视频语言
+[language.video]
+# source 与 target 共用代码：
+# | 代码 | 语言       | 代码 | 语言       |
+# |------|------------|------|------------|
+# | ar   | 阿拉伯语   | bg   | 保加利亚语 |
+# | cs   | 捷克语     | da   | 丹麦语     |
+# | de   | 德语       | el   | 希腊语     |
+# | en   | 英语       | es   | 西班牙语   |
+# | fa   | 波斯语     | fi   | 芬兰语     |
+# | fr   | 法语       | he   | 希伯来语   |
+# | hu   | 匈牙利语   | id   | 印尼语     |
+# | it   | 意大利语   | ja   | 日语       |
+# | ko   | 韩语       | ms   | 马来语     |
+# | nl   | 荷兰语     | pl   | 波兰语     |
+# | pt   | 葡萄牙语   | ro   | 罗马尼亚语 |
+# | ru   | 俄语       | sv   | 瑞典语     |
+# | th   | 泰语       | tr   | 土耳其语   |
+# | uk   | 乌克兰语   | vi   | 越南语     |
+# | yue  | 粤语       |      |            |
+#
+# 两者不共用的代码（Hans = 简化汉字，Hant = 繁体汉字）：
+# | 仅 source                                 | 含义                 | 仅 target           | 含义               |
+# |--------------------------------------------|----------------------|----------------------|--------------------|
+# | zh                                         | 中文语音，不分简繁   | zh-Hans              | 简体中文           |
+# | tl                                         | 菲律宾语             | fil                  | 菲律宾语           |
+# | no                                         | 挪威语               | nb                   | 挪威语             |
+# |                                            |                      | zh-Hant              | 繁体中文           |
+# |                                            |                      | pt-PT                | 葡萄牙（葡萄牙语） |
+# | af, am, as, az, ba, be, bn, bo, br, bs     | 其他可识别源语言代码 |                      |                    |
+# | ca, cy, et, eu, fo, gl, gu, ha, haw, hi    | 其他可识别源语言代码 |                      |                    |
+# | hr, ht, hy, is, jw, ka, kk, km, kn, la     | 其他可识别源语言代码 |                      |                    |
+# | lb, ln, lo, lt, lv, mg, mi, mk, ml, mn     | 其他可识别源语言代码 |                      |                    |
+# | mr, mt, my, ne, nn, oc, pa, ps, sa, sd     | 其他可识别源语言代码 |                      |                    |
+# | si, sk, sl, sn, so, sq, sr, su, sw, ta     | 其他可识别源语言代码 |                      |                    |
+# | te, tg, tk, tt, ur, uz, yi, yo              | 其他可识别源语言代码 |                      |                    |
+# 源视频语音语言；批处理不使用 auto。
+source = "ja"
+# 最终字幕译文语言。
+target = "zh-Hans"
+
+# 常改：转录主路线
+[transcription]
+engine = "faster-whisper"
+output_format = "SRT"
+model = "medium"
+device = "cuda"
+program = "Faster-Whisper-XXL/faster-whisper-xxl.exe"
+vad_filter = false
+vad_method = "silero_v5"
+vad_threshold = 0.4
+voice_extraction = false
+one_word = false
+word_timestamps = false
+prompt = ""
+# 多音轨视频默认使用第 1 条音轨；从 0 开始计数。
+audio_track_index = 0
+
+# 常改：翻译主路线
+[translation]
+enabled = true
+translator = "llm"
+llm_service = "deepseek"
+api_base = "https://api.deepseek.com/v1"
+model = "deepseek-flash"
+reflect = false
+optimize = false
+split = false
+max_words_cjk = 28
+max_words_english = 20
+custom_prompt = ""
+thread_num = 10
+batch_size = 10
+deeplx_endpoint = ""
+
+# 常改：端到端视频流水线；max_in_flight 是同时在途上限，不形成固定分组屏障。
+# 每次请求都发送完整视频字幕；超出安全预算时拒绝发送，禁止拆分。
+[translation_batching]
+max_in_flight = 5
+video_concurrency = 4
+max_input_tokens = 120000
+max_output_tokens = 32000
+output_reserve_ratio = 2.0
+reasoning_effort = "none"
+
+# 偶尔修改：最终输出
+[output]
+subtitle_layout = "target-above"
+synthesize_video = false
+soft_subtitle = true
+video_quality = "low"
+use_subtitle_style = false
+
+# 偶尔修改：自动署名；公开配置默认关闭，启用时必须填写 text。
+[intro_subtitle]
+enabled = false
+text = ""
+duration_seconds = 3.0
+
+# 偶尔修改：批处理输入格式；GUI 以空数组明确禁用。
+[input]
+video_extensions = [".mp4", ".webm", ".ogm", ".mov", ".mkv", ".avi", ".wmv", ".flv", ".m4v", ".ts", ".mpg", ".mpeg", ".vob", ".asf", ".rm", ".rmvb", ".m2ts", ".mts", ".dv", ".gxf", ".tod", ".mxf", ".f4v"]
+# 与 GUI 覆盖层保持键成对；批处理已固定为更新已有 SRT，不读取此兼容键。
+skip_existing_srt = false
+
+# 偶尔修改：交互策略。
+[interaction]
+confirm_after_scan = true
+pause_after_one_shot = true
+
+# 较少修改：逐视频 GPU 启动门禁。
+[gpu_gate]
+enabled = true
+index = 0
+busy_threshold_percent = 60
+poll_interval_seconds = 10.0
+query_timeout_seconds = 5.0
+required_low_readings_after_busy = 2
+
+# 较少修改：只保留确实参与运行或校验的项目功能开关。
+[project_features]
+request_level_auto_retry = false
+video_level_translation = true
+asr_consecutive_duplicate_cleanup = true

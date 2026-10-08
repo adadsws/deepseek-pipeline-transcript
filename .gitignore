@@ -1,0 +1,13 @@
+# 本地虚拟环境与 Python 原地缓存。
+/.venv/
+**/__pycache__/
+*.py[cod]
+
+# 可由已记录代码和输入重新生成的批处理产物。
+/~temp/
+/~outputs-intermediate/
+/~outputs-final/
+
+# 可按 runtime/VideoCaptioner/*.md 与下载脚本重建的大型本地运行资源。
+/runtime/VideoCaptioner/bin/
+/runtime/VideoCaptioner/models/

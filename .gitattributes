@@ -1,0 +1,5 @@
+*.bat text eol=crlf
+
+secrets/** filter=git-crypt diff=git-crypt -text
+secrets/*.example !filter !diff !text
+secrets/**/*.example !filter !diff !text

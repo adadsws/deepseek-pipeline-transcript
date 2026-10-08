@@ -1,0 +1,118 @@
+# 共用层：批处理未改写的上游设置、运行路径、缓存、日志与价格。
+
+# 上游其他转录路线
+[transcription.whisper]
+model = "tiny"
+
+[transcription.whisper_api]
+api_base = ""
+api_key_file = ""
+model = ""
+prompt = ""
+
+# 其他翻译服务；真实密钥只能通过 api_key_file 指向 secrets/ 下的文件。
+[translation.services.openai]
+api_base = "https://api.openai.com/v1"
+api_key_file = ""
+model = "gpt-4o-mini"
+
+[translation.services.siliconcloud]
+api_base = "https://api.siliconflow.cn/v1"
+api_key_file = ""
+model = "gpt-4o-mini"
+
+[translation.services.deepseek]
+api_base = "https://api.deepseek.com/v1"
+api_key_file = "secrets/deepseek-api-key.txt"
+model = "deepseek-flash"
+
+[translation.services.ollama]
+api_base = "http://localhost:11434/v1"
+api_key_file = ""
+model = "llama2"
+
+[translation.services.lm-studio]
+api_base = "http://localhost:1234/v1"
+api_key_file = ""
+model = "qwen2.5:7b"
+
+[translation.services.gemini]
+api_base = "https://generativelanguage.googleapis.com/v1beta/openai/"
+api_key_file = ""
+model = "gemini-pro"
+
+[translation.services.chatglm]
+api_base = "https://open.bigmodel.cn/api/paas/v4"
+api_key_file = ""
+model = "glm-4"
+
+# GUI 字幕样式
+[subtitle_style]
+name = "default"
+preview_image = ""
+render_mode = "圆角背景"
+
+[subtitle_style.rounded]
+font_name = "Noto Sans SC"
+font_size = 52
+background_color = "#191919C8"
+text_color = "#FFFFFF"
+corner_radius = 12
+padding_horizontal = 28
+padding_vertical = 14
+margin_bottom = 60
+line_spacing = 10
+letter_spacing = 0
+
+# GUI 界面
+[interface]
+theme_mode = "Dark"
+theme_color = "#ff28f08b"
+mica_enabled = false
+dpi_scale = "Auto"
+language = "Auto"
+check_updates_at_startup = true
+
+# 缓存与日志
+[cache]
+enabled = true
+translation_ttl_seconds = 604800
+
+[logging]
+level = "INFO"
+rotate_max_bytes = 10485760
+rotate_backup_count = 5
+rotation_retry_seconds = 60
+
+# 所有相对路径均以项目根目录为基准；密钥正文不进入 config。
+[paths]
+upstream_root = "reference/upstream/VideoCaptioner"
+faster_whisper_bin = "runtime/VideoCaptioner/bin"
+models = "runtime/VideoCaptioner/models"
+cache = "~temp/VideoCaptioner/cache"
+logs = "~outputs-intermediate/VideoCaptioner/logs"
+work = "~temp/VideoCaptioner/work"
+temp = "~temp/VideoCaptioner/tasks"
+gui_runtime_settings = "~temp/VideoCaptioner/gui/settings.json"
+batch_journal = "~outputs-intermediate/VideoCaptioner/logs/batch-runs"
+reports = "~outputs-final/batch-reports"
+deepseek_secret = "secrets/deepseek-api-key.txt"
+
+# DeepSeek 价格快照；修改前应核对 source 与 checked_on。
+[pricing.deepseek]
+currency = "CNY"
+unit = "per_1m_tokens"
+source = "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/"
+checked_on = "2026-09-21"
+peak_weekdays_utc = [1, 2, 3, 4, 5]
+peak_ranges_utc = [[1, 4], [6, 10]]
+
+[pricing.deepseek.peak]
+cache_hit_input = 0.04
+cache_miss_input = 2.0
+output = 8.0
+
+[pricing.deepseek.off_peak]
+cache_hit_input = 0.02
+cache_miss_input = 1.0
+output = 4.0
