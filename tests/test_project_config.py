@@ -25,6 +25,28 @@ class ProjectConfigTests(unittest.TestCase):
                 {"section": {"known": False}},
             )
 
+    def test_local_override_replaces_existing_value(self) -> None:
+        merged = project_config._merge_local_override(
+            {"intro_subtitle": {"enabled": False, "duration_seconds": 3.0}},
+            {"intro_subtitle": {"enabled": True}},
+        )
+        self.assertTrue(merged["intro_subtitle"]["enabled"])
+        self.assertEqual(merged["intro_subtitle"]["duration_seconds"], 3.0)
+
+    def test_local_override_rejects_unknown_value(self) -> None:
+        with self.assertRaisesRegex(project_config.ProjectConfigError, "未知项"):
+            project_config._merge_local_override(
+                {"intro_subtitle": {"enabled": False}},
+                {"intro_subtitle": {"unknown": True}},
+            )
+
+    def test_local_override_rejects_type_change(self) -> None:
+        with self.assertRaisesRegex(project_config.ProjectConfigError, "类型不一致"):
+            project_config._merge_local_override(
+                {"intro_subtitle": {"duration_seconds": 3.0}},
+                {"intro_subtitle": {"duration_seconds": "3"}},
+            )
+
     def test_languages_are_first_business_section(self) -> None:
         for mode in ("batch", "gui"):
             path = project_config.MODE_CONFIG_PATHS[mode]
@@ -61,6 +83,13 @@ class ProjectConfigTests(unittest.TestCase):
         self.assertEqual(intro["duration_seconds"], 3.0)
         if intro["enabled"]:
             self.assertTrue(intro["text"].strip())
+
+    def test_tracked_batch_intro_is_disabled_by_default(self) -> None:
+        batch = project_config._read_toml(project_config.MODE_CONFIG_PATHS["batch"])
+        self.assertEqual(
+            batch["intro_subtitle"],
+            {"enabled": False, "text": "", "duration_seconds": 3.0},
+        )
 
     def test_literal_tilde_category_stays_inside_project(self) -> None:
         path = project_config.resolve_project_path("~temp/VideoCaptioner/cache")

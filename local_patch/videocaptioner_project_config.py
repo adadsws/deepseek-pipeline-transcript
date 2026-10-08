@@ -1,4 +1,4 @@
-"""加载项目三层 TOML 配置，并生成上游 GUI 可读取的临时 JSON。"""
+"""加载项目 TOML 配置及可选本地覆盖，并生成 GUI 运行设置。"""
 
 from __future__ import annotations
 
@@ -16,6 +16,10 @@ SHARED_CONFIG_PATH = CONFIG_ROOT / "shared" / "settings.toml"
 MODE_CONFIG_PATHS = {
     "batch": CONFIG_ROOT / "batch" / "settings.toml",
     "gui": CONFIG_ROOT / "gui" / "settings.toml",
+}
+LOCAL_MODE_CONFIG_PATHS = {
+    "batch": CONFIG_ROOT / "batch" / "settings.local.toml",
+    "gui": CONFIG_ROOT / "gui" / "settings.local.toml",
 }
 
 
@@ -65,6 +69,32 @@ def _merge_without_overlap(base: dict[str, Any], overlay: dict[str, Any]) -> dic
     return result
 
 
+def _merge_local_override(
+    base: dict[str, Any], override: dict[str, Any]
+) -> dict[str, Any]:
+    """用本地值覆盖已有叶子；拒绝未知字段和类型变化。"""
+    result = deepcopy(base)
+
+    def merge(target: dict[str, Any], source: dict[str, Any], prefix: tuple[str, ...]) -> None:
+        for key, value in source.items():
+            current = (*prefix, key)
+            dotted = ".".join(current)
+            if key not in target:
+                raise ProjectConfigError(f"本地配置包含未知项: {dotted}")
+            current_value = target[key]
+            if isinstance(current_value, dict) and isinstance(value, dict):
+                merge(current_value, value, current)
+            elif isinstance(current_value, dict) or isinstance(value, dict):
+                raise ProjectConfigError(f"本地配置类型不一致: {dotted}")
+            elif type(current_value) is not type(value):
+                raise ProjectConfigError(f"本地配置类型不一致: {dotted}")
+            else:
+                target[key] = deepcopy(value)
+
+    merge(result, override, ())
+    return result
+
+
 def validate_mode_pair(
     batch: dict[str, Any] | None = None,
     gui: dict[str, Any] | None = None,
@@ -102,7 +132,7 @@ def load_mode_settings(
     shared_path: Path | None = None,
     mode_path: Path | None = None,
 ) -> dict[str, Any]:
-    """返回 shared + mode 的有效配置，并严格检查三层归属。"""
+    """返回 shared + mode + 可选本地覆盖的有效配置。"""
     if mode not in MODE_CONFIG_PATHS:
         raise ProjectConfigError(f"不支持的配置模式: {mode}")
     shared = _read_toml(shared_path or SHARED_CONFIG_PATH)
@@ -110,6 +140,10 @@ def load_mode_settings(
     if shared_path is None and mode_path is None:
         validate_mode_pair()
     result = _merge_without_overlap(shared, selected)
+    if shared_path is None and mode_path is None:
+        local_path = LOCAL_MODE_CONFIG_PATHS[mode]
+        if local_path.is_file():
+            result = _merge_local_override(result, _read_toml(local_path))
     _validate_effective_settings(result, mode)
     return result
 

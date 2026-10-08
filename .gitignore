@@ -3,6 +3,9 @@
 **/__pycache__/
 *.py[cod]
 
+# 每台电脑自己的配置覆盖，不发布到远端。
+/config/*/settings.local.toml
+
 # 可由已记录代码和输入重新生成的批处理产物。
 /~temp/
 /~outputs-intermediate/
