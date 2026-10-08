@@ -42,7 +42,10 @@ from videocaptioner_project_config import (  # noqa: E402
     load_mode_settings,
     resolve_project_path,
 )
-from videocaptioner_asr_cleanup import clean_source_srt_file  # noqa: E402
+from videocaptioner_asr_cleanup import (  # noqa: E402
+    clean_source_srt_file,
+    validate_source_srt_file,
+)
 
 
 # 所有运行参数只从三层 TOML 读取；这些模块常量只是本进程的配置快照。
@@ -101,6 +104,7 @@ GPU_QUERY_TIMEOUT_SECONDS = float(
 GPU_REQUIRED_LOW_READINGS = int(
     get_value(EFFECTIVE_CONFIG, "gpu_gate.required_low_readings_after_busy")
 )
+CONSOLE_WRAP_SAFETY_COLUMNS = 8
 
 FIXED_CONFIG = {
     "asr_model": get_value(EFFECTIVE_CONFIG, "transcription.model"),
@@ -254,6 +258,7 @@ class VideoResult:
     final_sentence_count: int = 0
     asr_removed_consecutive_duplicates: int = 0
     asr_removed_invalid_timelines: int = 0
+    asr_removed_invalid_encoding_cues: int = 0
     started_at: str = ""
     finished_at: str = ""
     duration_seconds: float = 0.0
@@ -608,13 +613,21 @@ def read_deepseek_key(path: Path = DEEPSEEK_SECRET_PATH) -> str:
 
 
 def _display_width(text: str) -> int:
-    """按 Windows 终端列宽计算文本，避免宽字符刷新后留下旧内容。"""
-    width = 0
+    """保守计算 Windows 终端列宽，避免模糊宽字符触发隐式换行。"""
+    character_widths: list[int] = []
     for char in text:
-        if unicodedata.combining(char):
+        if char == "\ufe0f":
+            if character_widths:
+                character_widths[-1] = max(character_widths[-1], 2)
             continue
-        width += 2 if unicodedata.east_asian_width(char) in {"F", "W"} else 1
-    return width
+        if unicodedata.combining(char) or unicodedata.category(char) in {"Cf", "Me", "Mn"}:
+            continue
+        # CMD/Windows Terminal 会随字体把 East Asian Ambiguous 字符渲染为双列。
+        # 按双列保守计算只会提前换行，不会让 ANSI 光标少回退一行。
+        character_widths.append(
+            2 if unicodedata.east_asian_width(char) in {"A", "F", "W"} else 1
+        )
+    return sum(character_widths)
 
 
 def _truncate_display_tail(text: str, max_width: int) -> str:
@@ -777,6 +790,7 @@ class _ProgressState:
     percent: int = 0
     message: str = "准备"
     settled: bool = False
+    counts_toward_eta: bool = True
     columns: int = 100
     rendered_lines: list[str] = field(default_factory=list)
 
@@ -796,15 +810,18 @@ class _VideoProgress:
 
 
 class ConsoleProgress:
-    """在普通 CMD 中为每个视频原位维护独立的多行进度区域。"""
+    """在普通 CMD 中为每个视频原位维护固定单行进度区域。"""
 
-    def __init__(self, total: int):
+    def __init__(self, total: int, eta_videos: set[str] | None = None):
         self.total = max(total, 1)
         self.index = 0
         self.video = ""
         self._rendered_lines = 0
         self._cursor_rewrite = _enable_console_cursor_rewrite()
-        self._started_at = time.monotonic()
+        self._eta_videos = eta_videos
+        self._eta_total = self.total if eta_videos is None else len(eta_videos)
+        self._eta_started_at: float | None = None
+        self._eta_completed = 0
         self._states: dict[int, _ProgressState] = {}
         self._current: _VideoProgress | None = None
         self._lock = threading.RLock()
@@ -814,9 +831,15 @@ class ConsoleProgress:
             self.index = index
             self.video = str(video)
             columns = shutil.get_terminal_size(fallback=(100, 24)).columns
+            counts_toward_eta = (
+                self._eta_videos is None or self.video in self._eta_videos
+            )
+            if counts_toward_eta and self._eta_started_at is None:
+                self._eta_started_at = time.monotonic()
             self._states[index] = _ProgressState(
                 index=index,
                 video=self.video,
+                counts_toward_eta=counts_toward_eta,
                 columns=columns,
             )
             handle = _VideoProgress(self, index)
@@ -832,24 +855,37 @@ class ConsoleProgress:
 
     def _progress_line(self, state: _ProgressState) -> str:
         percent = state.percent
-        completed = (state.index - 1) + percent / 100
-        elapsed = time.monotonic() - self._started_at
-        if completed <= 0 or elapsed < 3:
+        active_completed = sum(
+            item.percent / 100
+            for item in self._states.values()
+            if item.counts_toward_eta
+        )
+        completed = self._eta_completed + active_completed
+        elapsed = (
+            0.0
+            if self._eta_started_at is None
+            else time.monotonic() - self._eta_started_at
+        )
+        if self._eta_total <= 0 or completed <= 0 or elapsed < 3:
             remaining = "--:--"
         else:
-            remaining = _format_remaining(elapsed * (self.total - completed) / completed)
-        left = f"[{state.index:>{len(str(self.total))}}/{self.total}] ["
-        right = f"] {percent:3d}% | 剩余 {remaining}"
-        available = state.columns - _display_width(left + right)
-        bar_size = max(1, min(14, available))
-        filled = int(bar_size * percent / 100)
-        bar = "#" * filled + "-" * (bar_size - filled)
-        return left + bar + right
+            remaining = _format_remaining(
+                elapsed * max(0.0, self._eta_total - completed) / completed
+            )
+        return (
+            f"[{state.index:>{len(str(self.total))}}/{self.total}] "
+            f"{percent:3d}% | 剩余 {remaining}"
+        )
 
     def _detail_lines(self, state: _ProgressState) -> list[str]:
-        """在所属视频区域内显示状态和完整路径，长路径使用同一缩进续行。"""
+        """为重定向输出保留状态和完整路径，长路径使用同一缩进续行。"""
         indent = "    "
-        usable_width = max(1, state.columns - _display_width(indent) - 1)
+        usable_width = max(
+            1,
+            state.columns
+            - _display_width(indent)
+            - CONSOLE_WRAP_SAFETY_COLUMNS,
+        )
         label = _truncate_display_tail(
             _progress_detail_label(state.message).rstrip("："),
             usable_width,
@@ -858,7 +894,22 @@ class ConsoleProgress:
         return [indent + label, *(indent + line for line in path_lines)]
 
     def _render_lines(self, state: _ProgressState) -> list[str]:
-        return [self._progress_line(state), *self._detail_lines(state)]
+        progress_line = self._progress_line(state)
+        if not self._cursor_rewrite:
+            return [progress_line, *self._detail_lines(state)]
+
+        # 并发原位刷新只能依赖实际终端行数；完整长路径和字体相关的
+        # Unicode 宽度会让 CMD 隐式折行，使后续刷新覆盖其他视频。
+        # 交互终端因此固定为一行，最终汇总和报告仍提供完整路径。
+        safe_width = max(1, state.columns - CONSOLE_WRAP_SAFETY_COLUMNS)
+        separator = " | "
+        label = _progress_detail_label(state.message).rstrip("：")
+        fixed = progress_line + separator + label
+        path_budget = safe_width - _display_width(fixed + separator)
+        if path_budget <= 3:
+            return [fixed]
+        path = _truncate_display_tail(state.video, path_budget)
+        return [fixed + separator + path]
 
     def _update_video(self, index: int, percent: int, message: str) -> None:
         percent = max(0, min(int(percent), 100))
@@ -916,12 +967,16 @@ class ConsoleProgress:
                 # 重定向输出无法原位刷新；缓存后续完成项，始终按输入顺序落盘。
                 while self._states and next(iter(self._states.values())).settled:
                     first_key = next(iter(self._states))
-                    print("\n".join(self._states[first_key].rendered_lines))
-                    del self._states[first_key]
+                    settled_state = self._states.pop(first_key)
+                    print("\n".join(settled_state.rendered_lines))
+                    if settled_state.counts_toward_eta:
+                        self._eta_completed += 1
             else:
                 state.settled = True
                 while self._states and next(iter(self._states.values())).settled:
                     settled_state = self._states.pop(next(iter(self._states)))
+                    if settled_state.counts_toward_eta:
+                        self._eta_completed += 1
                     self._rendered_lines -= len(settled_state.rendered_lines)
                 if not self._states:
                     sys.stdout.write("\n")
@@ -1234,7 +1289,10 @@ def _prepare_video(
                 int(value * 0.55), f"转录：{message}"
             ),
         )
-        raw_sentence_count = validate_complete_srt(source_srt)
+        try:
+            raw_sentence_count = validate_source_srt_file(source_srt)
+        except ValueError as exc:
+            raise StageError("validate", str(exc)) from exc
         result.raw_source_sentence_count = raw_sentence_count
         translated_srt.unlink(missing_ok=True)
         progress.update(
@@ -1275,12 +1333,16 @@ def _process_downstream_video(
                 cleanup.removed_consecutive_duplicates
             )
             result.asr_removed_invalid_timelines = cleanup.removed_invalid_timelines
+            result.asr_removed_invalid_encoding_cues = (
+                cleanup.removed_invalid_encoding_cues
+            )
         result.source_sentence_count = validate_complete_srt(prepared.source_srt)
         cleanup_text = ""
         if ASR_CLEANUP_ENABLED:
             cleanup_text = (
                 f"，删除连续重复 {result.asr_removed_consecutive_duplicates}"
                 f"、反向时间轴 {result.asr_removed_invalid_timelines}"
+                f"、无效编码 cue {result.asr_removed_invalid_encoding_cues}"
             )
         progress.update(
             55,
@@ -1447,6 +1509,9 @@ def _report_summary(results: Iterable[VideoResult]) -> dict[str, object]:
         "total_asr_removed_invalid_timelines": sum(
             item.asr_removed_invalid_timelines for item in rows
         ),
+        "total_asr_removed_invalid_encoding_cues": sum(
+            item.asr_removed_invalid_encoding_cues for item in rows
+        ),
         "token_usage": asdict(summarise_token_usage(rows)),
         "failed_token_usage": asdict(summarise_token_usage(rows, status="error")),
     }
@@ -1488,6 +1553,7 @@ def write_reports(input_path: Path, results: Iterable[VideoResult]) -> tuple[Pat
                 "source_sentence_count", "final_sentence_count",
                 "asr_removed_consecutive_duplicates",
                 "asr_removed_invalid_timelines",
+                "asr_removed_invalid_encoding_cues",
                 "duration_seconds",
                 "api_requests",
                 "peak_requests", "off_peak_requests", "input_cache_hit_tokens",
@@ -1510,6 +1576,9 @@ def write_reports(input_path: Path, results: Iterable[VideoResult]) -> tuple[Pat
                     ),
                     "asr_removed_invalid_timelines": (
                         item.asr_removed_invalid_timelines
+                    ),
+                    "asr_removed_invalid_encoding_cues": (
+                        item.asr_removed_invalid_encoding_cues
                     ),
                     "duration_seconds": item.duration_seconds,
                     **asdict(item.token_usage),
@@ -1546,10 +1615,14 @@ def print_summary(results: list[VideoResult], report_paths: tuple[Path, Path]) -
     )
     removed_duplicates = summary["total_asr_removed_consecutive_duplicates"]
     removed_invalid_timelines = summary["total_asr_removed_invalid_timelines"]
-    if removed_duplicates or removed_invalid_timelines:
+    removed_invalid_encoding_cues = summary[
+        "total_asr_removed_invalid_encoding_cues"
+    ]
+    if removed_duplicates or removed_invalid_timelines or removed_invalid_encoding_cues:
         print(
             f"ASR 清理 连续重复 {removed_duplicates:,} | "
-            f"反向时间轴 {removed_invalid_timelines:,}"
+            f"反向时间轴 {removed_invalid_timelines:,} | "
+            f"无效编码 cue {removed_invalid_encoding_cues:,}"
         )
     print(
         f"DeepSeek 请求 {total_usage['api_requests']}（峰 {total_usage['peak_requests']}/"
@@ -1658,7 +1731,12 @@ def _run_batch(raw_path: str, overwrite: bool, confirm: bool = False) -> int:
             video=str(video),
         )
 
-    progress = ConsoleProgress(len(videos))
+    eta_videos = {
+        str(video)
+        for video in videos
+        if overwrite or not video.with_suffix(".srt").is_file()
+    }
+    progress = ConsoleProgress(len(videos), eta_videos=eta_videos)
     results = process_video_group(
         videos,
         config,

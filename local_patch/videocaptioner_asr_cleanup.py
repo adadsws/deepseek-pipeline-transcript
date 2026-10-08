@@ -1,4 +1,4 @@
-"""在 VAD 关闭时把字幕序列中连续相同的 ASR 文本保留第一条。"""
+"""清理 VAD 关闭后源字幕中的损坏 cue 与连续重复文本。"""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ class CleanupStats:
     final_cues: int
     removed_consecutive_duplicates: int
     removed_invalid_timelines: int
+    removed_invalid_encoding_cues: int
 
 
 def _timestamp_ms(parts: tuple[str, ...]) -> int:
@@ -73,11 +74,16 @@ def normalise_repetition_text(text: str) -> str:
 
 
 def clean_source_cues(cues: list[SourceCue]) -> tuple[list[SourceCue], CleanupStats]:
-    """删除反向时间轴，并把连续相同文本只保留第一条。"""
+    """删除含替换字符或反向时间轴的 cue，并把连续相同文本只保留第一条。"""
     kept: list[SourceCue] = []
     removed_duplicates = 0
     removed_invalid_timelines = 0
+    removed_invalid_encoding_cues = 0
     for cue in cues:
+        # U+FFFD 表示原字符已经不可恢复；删除整个 cue，避免保留混语或残缺文本。
+        if "\ufffd" in cue.text:
+            removed_invalid_encoding_cues += 1
+            continue
         # 上游 optimize_timing 在片段严重重叠时可能产生结束早于开始的 cue。
         # 正确边界已不可恢复，删除该 cue 比交换或猜测时间戳更保守。
         if cue.end_ms < cue.start_ms:
@@ -94,6 +100,7 @@ def clean_source_cues(cues: list[SourceCue]) -> tuple[list[SourceCue], CleanupSt
         final_cues=len(kept),
         removed_consecutive_duplicates=removed_duplicates,
         removed_invalid_timelines=removed_invalid_timelines,
+        removed_invalid_encoding_cues=removed_invalid_encoding_cues,
     )
     return kept, stats
 
@@ -119,3 +126,14 @@ def clean_source_srt_file(path: Path) -> CleanupStats:
     finally:
         temporary.unlink(missing_ok=True)
     return stats
+
+
+def validate_source_srt_file(path: Path) -> int:
+    """校验清理前源 SRT 的结构，暂时允许由清理阶段删除 U+FFFD cue。"""
+    if not path.is_file() or path.stat().st_size == 0:
+        raise ValueError("SRT 为空白")
+    try:
+        text = path.read_text(encoding="utf-8-sig", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError("SRT 包含无效 UTF-8 编码") from exc
+    return len(parse_source_srt(text))

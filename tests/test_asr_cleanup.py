@@ -16,6 +16,7 @@ from videocaptioner_asr_cleanup import (  # noqa: E402
     clean_source_cues,
     clean_source_srt_file,
     normalise_repetition_text,
+    validate_source_srt_file,
 )
 
 
@@ -83,6 +84,36 @@ class ASRCleanupTests(unittest.TestCase):
         self.assertEqual(stats.removed_invalid_timelines, 1)
         self.assertNotIn("壊れた時間軸。", output)
         self.assertIn("2\n00:00:05,000 --> 00:00:05,000\nゼロ秒は保持。", output)
+
+    def test_replacement_character_cue_is_removed_and_remaining_cues_are_reindexed(
+        self,
+    ) -> None:
+        source = (
+            "1\n00:00:01,000 --> 00:00:02,000\n最初の字幕。\n\n"
+            "2\n00:00:03,000 --> 00:00:04,000\n허\ufffd hair\n\n"
+            "3\n00:00:05,000 --> 00:00:06,000\n最後の字幕。\n"
+        )
+        with tempfile.TemporaryDirectory() as temp_name:
+            path = Path(temp_name) / "source.srt"
+            path.write_text(source, encoding="utf-8")
+            self.assertEqual(validate_source_srt_file(path), 3)
+            stats = clean_source_srt_file(path)
+            output = path.read_text(encoding="utf-8")
+
+        self.assertEqual(stats.original_cues, 3)
+        self.assertEqual(stats.final_cues, 2)
+        self.assertEqual(stats.removed_invalid_encoding_cues, 1)
+        self.assertNotIn("\ufffd", output)
+        self.assertNotIn("허", output)
+        self.assertIn("2\n00:00:05,000 --> 00:00:06,000\n最後の字幕。", output)
+
+    def test_only_replacement_character_cues_cannot_produce_an_empty_srt(self) -> None:
+        source = "1\n00:00:00,000 --> 00:00:01,000\n壊れた\ufffd字幕\n"
+        with tempfile.TemporaryDirectory() as temp_name:
+            path = Path(temp_name) / "source.srt"
+            path.write_text(source, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "ASR 清理后没有剩余字幕"):
+                clean_source_srt_file(path)
 
     def test_only_reversed_timelines_cannot_produce_an_empty_srt(self) -> None:
         source = "1\n00:00:02,000 --> 00:00:01,000\n壊れた時間軸。\n"

@@ -129,8 +129,9 @@ class HeadlessBatchTests(unittest.TestCase):
             progress.update(50, "转录")
         text = output.getvalue()
         self.assertIn("[ 2/12]", text)
-        self.assertIn("[#######-------]  50%", text)
-        self.assertEqual(text.count("[#######-------]  50%"), 1)
+        self.assertIn(" 50%", text)
+        self.assertNotIn("#", text)
+        self.assertEqual(text.count(" 50%"), 1)
         self.assertNotIn("| 当前：", text)
         self.assertIn("当前转录", text)
         self.assertIn("very-long-video-file-name-for-test.mp4", text)
@@ -154,14 +155,53 @@ class HeadlessBatchTests(unittest.TestCase):
             batch, "_enable_console_cursor_rewrite", return_value=True
         ):
             progress = batch.ConsoleProgress(10)
-        progress.index = 2
-        progress.video = "测试视频.mp4"
+            first = progress.begin(1, Path("第一个视频.mp4"))
+            first.update(100, "完成（1 句）")
+            first.finish_line()
+            current = progress.begin(2, Path("测试视频.mp4"))
         output = io.StringIO()
         with mock.patch.object(batch.time, "monotonic", return_value=10), mock.patch.object(
             batch.sys, "stdout", output
         ):
-            progress.update(50, "转录")
+            current.update(50, "转录")
         self.assertIn("剩余 00:57", output.getvalue())
+
+    def test_eta_ignores_existing_srt_videos_and_their_elapsed_time(self) -> None:
+        output = io.StringIO()
+        existing = Path(r"V:\folder\existing.mp4")
+        pending = Path(r"V:\folder\pending.mp4")
+        with mock.patch.object(batch.sys, "stdout", output), mock.patch.object(
+            batch, "_enable_console_cursor_rewrite", return_value=True
+        ):
+            with mock.patch.object(batch.time, "monotonic", return_value=0):
+                progress = batch.ConsoleProgress(2, eta_videos={str(pending)})
+                skipped = progress.begin(1, existing)
+                skipped.update(100, "已有同名 SRT 已加入署名（95 句）")
+                skipped.finish_line()
+
+            with mock.patch.object(batch.time, "monotonic", return_value=100):
+                current = progress.begin(2, pending)
+            with mock.patch.object(batch.time, "monotonic", return_value=110):
+                current.update(50, "翻译：处理中")
+
+        self.assertIn("剩余 00:10", output.getvalue())
+
+    def test_existing_srt_status_is_never_abbreviated(self) -> None:
+        output = io.StringIO()
+        with mock.patch.object(batch.sys, "stdout", output), mock.patch.object(
+            batch, "_enable_console_cursor_rewrite", return_value=True
+        ), mock.patch.object(
+            batch.shutil,
+            "get_terminal_size",
+            return_value=os.terminal_size((80, 24)),
+        ):
+            progress = batch.ConsoleProgress(1, eta_videos=set())
+            current = progress.begin(1, Path(r"V:\very-long-folder\video.mp4"))
+            current.update(100, "已有同名 SRT 已加入署名（95 句）")
+
+        line = progress._states[1].rendered_lines[0]
+        self.assertIn("已有 SRT 已加入署名（95 句）", line)
+        self.assertNotIn("... SRT", line)
 
     def test_noninteractive_progress_prints_only_final_snapshot(self) -> None:
         output = io.StringIO()
@@ -284,9 +324,32 @@ class HeadlessBatchTests(unittest.TestCase):
 
     def test_console_progress_uses_terminal_width_for_wide_characters(self) -> None:
         self.assertEqual(batch._display_width("中文A"), 5)
+        self.assertEqual(batch._display_width("♡☆♪№●"), 10)
+        self.assertEqual(batch._display_width("❤️"), 2)
         shortened = batch._truncate_display_tail("很长的文件名-video.mp4", 12)
         self.assertTrue(shortened.startswith("..."))
         self.assertLessEqual(batch._display_width(shortened), 12)
+
+    def test_interactive_progress_keeps_unicode_path_on_one_safe_line(self) -> None:
+        output = io.StringIO()
+        path = Path(r"V:\folder\♡☆♪№●" * 12 + "video.mp4")
+        terminal_size = os.terminal_size((120, 30))
+        with mock.patch.object(batch.sys, "stdout", output), mock.patch.object(
+            batch, "_enable_console_cursor_rewrite", return_value=True
+        ), mock.patch.object(
+            batch.shutil, "get_terminal_size", return_value=terminal_size
+        ):
+            progress = batch.ConsoleProgress(5)
+            current = progress.begin(1, path)
+            current.update(55, "翻译：处理中")
+
+            state = progress._states[1]
+            self.assertEqual(len(state.rendered_lines), 1)
+            self.assertLessEqual(
+                batch._display_width(state.rendered_lines[0]),
+                terminal_size.columns - batch.CONSOLE_WRAP_SAFETY_COLUMNS,
+            )
+            self.assertIn("video.mp4", state.rendered_lines[0])
 
     def test_summary_is_compact_and_only_lists_error_files(self) -> None:
         success = batch.VideoResult(video="ok.mp4", status="success", final_sentence_count=3)
@@ -429,6 +492,16 @@ class HeadlessBatchTests(unittest.TestCase):
 
             self.assertEqual(batch.validate_complete_srt(path), 3)
             self.assertEqual(batch.count_srt_cues(path), 3)
+
+    def test_final_validation_rejects_replacement_character(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_name:
+            path = Path(temp_name) / "invalid-encoding.srt"
+            path.write_text(
+                "1\n00:00:00,000 --> 00:00:01,000\n壊れた\ufffd字幕\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(batch.StageError, "无效编码字符"):
+                batch.validate_complete_srt(path)
 
     def test_existing_same_name_srt_is_updated_without_transcription(self) -> None:
         with tempfile.TemporaryDirectory() as temp_name:
@@ -917,6 +990,7 @@ class HeadlessBatchTests(unittest.TestCase):
                 final_sentence_count=7,
                 asr_removed_consecutive_duplicates=3,
                 asr_removed_invalid_timelines=2,
+                asr_removed_invalid_encoding_cues=1,
             )
             result.token_usage = batch.TokenUsage(
                 api_requests=1,
@@ -946,9 +1020,17 @@ class HeadlessBatchTests(unittest.TestCase):
                 payload["summary"]["total_asr_removed_invalid_timelines"],
                 2,
             )
+            self.assertEqual(
+                payload["summary"]["total_asr_removed_invalid_encoding_cues"],
+                1,
+            )
             self.assertIn("raw_source_sentence_count", csv_path.read_text(encoding="utf-8-sig"))
             self.assertIn(
                 "asr_removed_invalid_timelines",
+                csv_path.read_text(encoding="utf-8-sig"),
+            )
+            self.assertIn(
+                "asr_removed_invalid_encoding_cues",
                 csv_path.read_text(encoding="utf-8-sig"),
             )
             self.assertEqual(payload["pricing"]["model"], "deepseek-flash")
@@ -1036,6 +1118,49 @@ class HeadlessBatchTests(unittest.TestCase):
             translate.assert_not_called()
             self.assertEqual(result.status, "error")
             self.assertEqual(result.errors[-1].category, "invalid_or_blank_srt")
+
+    def test_process_video_removes_replacement_character_cue_before_translation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_name:
+            video = Path(temp_name) / "mixed.mp4"
+            video.write_bytes(b"video")
+            config = batch.BatchConfig("ja", "zh-Hans")
+            progress = batch.ConsoleProgress(1)
+            progress.begin(1, video)
+
+            def fake_transcribe(_video, output, _config, _progress):
+                output.write_text(
+                    "1\n00:00:00,000 --> 00:00:01,000\n正常な字幕。\n\n"
+                    "2\n00:00:01,000 --> 00:00:02,000\n허\ufffd hair\n",
+                    encoding="utf-8",
+                )
+
+            def fake_translate(_video, source, output, _config, _key, _progress, _usage):
+                source_text = source.read_text(encoding="utf-8")
+                self.assertNotIn("\ufffd", source_text)
+                self.assertNotIn("허", source_text)
+                output.write_text(
+                    "1\n00:00:00,000 --> 00:00:01,000\n正常字幕\n正常な字幕\n",
+                    encoding="utf-8",
+                )
+
+            with mock.patch.object(
+                batch, "_run_transcription", side_effect=fake_transcribe
+            ), mock.patch.object(
+                batch, "_run_translation", side_effect=fake_translate
+            ):
+                result = batch.process_video(
+                    video, config, "secret", progress, overwrite=False
+                )
+
+            progress.finish_line()
+            self.assertEqual(result.status, "success", result.errors)
+            self.assertEqual(result.raw_source_sentence_count, 2)
+            self.assertEqual(result.source_sentence_count, 1)
+            self.assertEqual(result.final_sentence_count, 1)
+            self.assertEqual(result.asr_removed_invalid_encoding_cues, 1)
+            self.assertTrue(Path(result.output).is_file())
 
     def test_process_video_classifies_all_reversed_timelines_as_invalid_srt(
         self,
