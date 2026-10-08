@@ -24,7 +24,7 @@ model = "gpt-4o-mini"
 [translation.services.deepseek]
 api_base = "https://api.deepseek.com/v1"
 api_key_file = "secrets/deepseek-api-key.txt"
-model = "deepseek-flash"
+model = "deepseek-chat"
 
 [translation.services.ollama]
 api_base = "http://localhost:11434/v1"

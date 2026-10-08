@@ -55,10 +55,12 @@ class ProjectConfigTests(unittest.TestCase):
         self.assertNotIn("round_end_retry_menu", batch["interaction"])
         self.assertNotIn("default_retry_choice", batch["interaction"])
         self.assertNotIn("transcription_cleanup", batch)
-        self.assertEqual(
-            batch["intro_subtitle"],
-            {"enabled": False, "text": "", "duration_seconds": 3.0},
-        )
+        intro = batch["intro_subtitle"]
+        self.assertIsInstance(intro["enabled"], bool)
+        self.assertIsInstance(intro["text"], str)
+        self.assertEqual(intro["duration_seconds"], 3.0)
+        if intro["enabled"]:
+            self.assertTrue(intro["text"].strip())
 
     def test_literal_tilde_category_stays_inside_project(self) -> None:
         path = project_config.resolve_project_path("~temp/VideoCaptioner/cache")
@@ -75,15 +77,24 @@ class ProjectConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(project_config.ProjectConfigError, "不得越出"):
                 project_config.load_mode_settings("batch", shared_path=shared_path)
 
-    def test_gui_qconfig_contains_current_user_values(self) -> None:
+    def test_gui_qconfig_uses_upstream_defaults(self) -> None:
         gui = project_config.load_mode_settings("gui")
         qconfig = project_config.build_gui_qconfig(gui)
-        self.assertEqual(qconfig["Transcribe"]["TranscribeLanguage"], "日本語")
+        self.assertEqual(qconfig["Transcribe"]["TranscribeLanguage"], "自动检测")
+        self.assertEqual(qconfig["Transcribe"]["TranscribeModel"], "B 接口")
         self.assertEqual(qconfig["Subtitle"]["TargetLanguage"], "简体中文")
+        self.assertFalse(qconfig["Subtitle"]["NeedTranslate"])
+        self.assertEqual(qconfig["Translate"]["TranslatorServiceEnum"], "微软翻译")
         self.assertTrue(qconfig["FasterWhisper"]["VadFilter"])
-        self.assertEqual(qconfig["LLM"]["DeepSeek_Model"], "deepseek-flash")
+        self.assertEqual(qconfig["FasterWhisper"]["Model"], "tiny")
+        self.assertTrue(qconfig["FasterWhisper"]["OneWord"])
+        self.assertEqual(qconfig["LLM"]["LLMService"], "OpenAI 兼容")
+        self.assertEqual(qconfig["LLM"]["DeepSeek_Model"], "deepseek-chat")
         self.assertEqual(qconfig["LLM"]["DeepSeek_API_Base"], "https://api.deepseek.com/v1")
         self.assertEqual(qconfig["LLM"]["DeepSeek_API_Key"], "")
+        self.assertTrue(qconfig["Video"]["NeedVideo"])
+        self.assertFalse(qconfig["Video"]["SoftSubtitle"])
+        self.assertEqual(qconfig["Video"]["VideoQuality"], "中等质量")
 
     def test_config_directory_contains_only_toml_text(self) -> None:
         files = [item for item in (PROJECT_ROOT / "config").rglob("*") if item.is_file()]

@@ -1,7 +1,7 @@
 # GUI 对照配置公开模板；不包含任何真实 API Key。
 [language.video]
 source = "auto"
-target = "en-US"
+target = "zh-Hans"
 
 [transcription]
 engine = "bijian"

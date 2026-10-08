@@ -1,31 +1,30 @@
-# GUI 对照层：字段与 batch/settings.toml 完全成对，值保留迁移前 GUI 实际设置。
-# 最常修改：视频语言
+# GUI 对照层：字段与 batch/settings.toml 完全成对，行为值恢复为上游默认设置。
 [language.video]
-source = "ja"
+source = "auto"
 target = "zh-Hans"
 
 [transcription]
-engine = "faster-whisper"
+engine = "bijian"
 output_format = "SRT"
-model = "medium"
+model = "tiny"
 device = "cuda"
 program = "Faster-Whisper-XXL/faster-whisper-xxl.exe"
 vad_filter = true
-vad_method = "silero_v5"
+vad_method = "silero_v4"
 vad_threshold = 0.4
 voice_extraction = false
-one_word = false
+one_word = true
 word_timestamps = false
 prompt = ""
 # GUI 由每个视频的音轨菜单选择，-1 表示不使用项目级固定值。
 audio_track_index = -1
 
 [translation]
-enabled = true
-translator = "llm"
-llm_service = "deepseek"
-api_base = "https://api.deepseek.com/v1"
-model = "deepseek-flash"
+enabled = false
+translator = "bing"
+llm_service = "openai"
+api_base = "https://api.openai.com/v1"
+model = "gpt-4o-mini"
 reflect = false
 optimize = false
 split = false
@@ -47,12 +46,12 @@ reasoning_effort = ""
 
 [output]
 subtitle_layout = "target-above"
-synthesize_video = false
-soft_subtitle = true
-video_quality = "low"
+synthesize_video = true
+soft_subtitle = false
+video_quality = "medium"
 use_subtitle_style = false
 
-# GUI 当前不使用自动署名；保留与 batch 成对的默认关闭配置。
+# 自动署名是项目扩展功能，GUI 默认关闭。
 [intro_subtitle]
 enabled = false
 text = ""
