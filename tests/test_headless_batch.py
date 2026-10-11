@@ -351,6 +351,30 @@ class HeadlessBatchTests(unittest.TestCase):
             )
             self.assertIn("video.mp4", state.rendered_lines[0])
 
+    def test_interactive_progress_truncates_long_status_before_it_can_wrap(self) -> None:
+        output = io.StringIO()
+        terminal_size = os.terminal_size((100, 30))
+        with mock.patch.object(batch.sys, "stdout", output), mock.patch.object(
+            batch, "_enable_console_cursor_rewrite", return_value=True
+        ), mock.patch.object(
+            batch.shutil, "get_terminal_size", return_value=terminal_size
+        ):
+            progress = batch.ConsoleProgress(290)
+            current = progress.begin(70, Path(r"V:\folder\FC2PPV-4588403-1.mp4"))
+            current.update(
+                55,
+                "源字幕后处理完成（1498 → 1447 句，删除连续重复 51、"
+                "反向时间轴 0、无效编码 cue 0）",
+            )
+
+        state = progress._states[70]
+        self.assertEqual(len(state.rendered_lines), 1)
+        self.assertLessEqual(
+            batch._display_width(state.rendered_lines[0]),
+            terminal_size.columns - batch.CONSOLE_WRAP_SAFETY_COLUMNS,
+        )
+        self.assertIn("FC2PPV-4588403-1.mp4", state.rendered_lines[0])
+
     def test_summary_is_compact_and_only_lists_error_files(self) -> None:
         success = batch.VideoResult(video="ok.mp4", status="success", final_sentence_count=3)
         failed = batch.VideoResult(video="bad.mp4", status="error")

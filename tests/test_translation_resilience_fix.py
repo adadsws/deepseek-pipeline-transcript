@@ -41,7 +41,7 @@ class TranslationResilienceFixTests(unittest.TestCase):
         self.assertEqual(options["reasoning_effort"], "none")
         self.assertEqual(options["extra_body"], {"thinking": {"type": "disabled"}})
         self.assertEqual(options["response_format"], {"type": "json_object"})
-        self.assertEqual(options["max_tokens"], 32000)
+        self.assertEqual(options["max_tokens"], 120000)
         self.assertIn("json", resilience.ensure_json_instruction("output dictionary").lower())
         existing = "Output valid JSON"
         self.assertEqual(resilience.ensure_json_instruction(existing), existing)

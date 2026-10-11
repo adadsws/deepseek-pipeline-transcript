@@ -105,6 +105,7 @@ GPU_REQUIRED_LOW_READINGS = int(
     get_value(EFFECTIVE_CONFIG, "gpu_gate.required_low_readings_after_busy")
 )
 CONSOLE_WRAP_SAFETY_COLUMNS = 8
+CONSOLE_MIN_PATH_COLUMNS = 28
 
 FIXED_CONFIG = {
     "asr_model": get_value(EFFECTIVE_CONFIG, "transcription.model"),
@@ -904,7 +905,20 @@ class ConsoleProgress:
         safe_width = max(1, state.columns - CONSOLE_WRAP_SAFETY_COLUMNS)
         separator = " | "
         label = _progress_detail_label(state.message).rstrip("：")
-        fixed = progress_line + separator + label
+        prefix = progress_line + separator
+        preserve_label = state.message.startswith(
+            ("已有同名 SRT 已加入署名", "完成", "失败")
+        )
+        reserved_path_width = 3 if preserve_label else CONSOLE_MIN_PATH_COLUMNS
+        label_budget = max(
+            1,
+            safe_width
+            - _display_width(prefix)
+            - _display_width(separator)
+            - reserved_path_width,
+        )
+        label = _truncate_display_tail(label, label_budget)
+        fixed = prefix + label
         path_budget = safe_width - _display_width(fixed + separator)
         if path_budget <= 3:
             return [fixed]
