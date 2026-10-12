@@ -43,6 +43,8 @@ max_input_tokens = 0
 max_output_tokens = 0
 output_reserve_ratio = 0.0
 reasoning_effort = ""
+request_timeout_seconds = 0.0
+connect_timeout_seconds = 0.0
 
 [output]
 subtitle_layout = "target-above"

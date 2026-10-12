@@ -84,6 +84,8 @@ max_input_tokens = 120000
 max_output_tokens = 120000
 output_reserve_ratio = 2.0
 reasoning_effort = "none"
+request_timeout_seconds = 600.0
+connect_timeout_seconds = 30.0
 
 # 偶尔修改：最终输出
 [output]

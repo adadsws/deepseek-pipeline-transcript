@@ -492,10 +492,12 @@ def validate_complete_srt(path: Path) -> int:
 
 
 def _normalise_original_lines(lines: list[str]) -> list[str]:
-    """复现上游发布前仅移除末尾中文逗号和句号的处理。"""
+    """复现上游发布前的句尾处理，但不得将纯标点原文清空。"""
     normalised = [line.strip() for line in lines if line.strip()]
     if normalised:
-        normalised[-1] = re.sub(r"[，。]+$", "", normalised[-1]).strip()
+        stripped = re.sub(r"[，。]+$", "", normalised[-1]).strip()
+        if stripped:
+            normalised[-1] = stripped
     return normalised
 
 

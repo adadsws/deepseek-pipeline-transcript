@@ -11,6 +11,7 @@ import threading
 from contextlib import contextmanager
 from typing import Callable
 
+import httpx
 import json_repair
 
 from videocaptioner_project_config import get_value, load_mode_settings
@@ -35,6 +36,12 @@ _OUTPUT_RESERVE_RATIO = float(
 )
 _REASONING_EFFORT = str(
     get_value(_BATCH_SETTINGS, "translation_batching.reasoning_effort")
+)
+_REQUEST_TIMEOUT_SECONDS = float(
+    get_value(_BATCH_SETTINGS, "translation_batching.request_timeout_seconds")
+)
+_CONNECT_TIMEOUT_SECONDS = float(
+    get_value(_BATCH_SETTINGS, "translation_batching.connect_timeout_seconds")
 )
 _VIDEO_BATCH_CACHE_VERSION = "full-video-v2"
 _usage_context = threading.local()
@@ -247,7 +254,14 @@ def call_llm_api_once(
     **kwargs: object,
 ) -> object:
     """单次调用 OpenAI 兼容接口，显式关闭 SDK 内建重试。"""
-    api_client = llm_client.get_llm_client().with_options(max_retries=0)
+    timeout = httpx.Timeout(
+        _REQUEST_TIMEOUT_SECONDS,
+        connect=_CONNECT_TIMEOUT_SECONDS,
+    )
+    api_client = llm_client.get_llm_client().with_options(
+        max_retries=0,
+        timeout=timeout,
+    )
     response = api_client.chat.completions.create(
         model=model,
         messages=messages,

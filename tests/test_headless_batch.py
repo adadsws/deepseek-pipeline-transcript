@@ -709,6 +709,24 @@ class HeadlessBatchTests(unittest.TestCase):
             )
             self.assertEqual(batch.validate_bilingual_output(source, translated), 1)
 
+    def test_bilingual_output_preserves_punctuation_only_original(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_name:
+            root = Path(temp_name)
+            source = root / "source.srt"
+            translated = root / "translated.srt"
+            source.write_text(
+                "1\n00:00:00,000 --> 00:00:01,000\n。。\n\n"
+                "2\n00:00:01,000 --> 00:00:02,000\n。。。\n",
+                encoding="utf-8",
+            )
+            translated.write_text(
+                "1\n00:00:00,000 --> 00:00:01,000\n……\n。。\n\n"
+                "2\n00:00:01,000 --> 00:00:02,000\n……\n。。。\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(batch.validate_bilingual_output(source, translated), 2)
+
     def test_token_usage_uses_peak_and_off_peak_prices(self) -> None:
         response = SimpleNamespace(
             usage=SimpleNamespace(

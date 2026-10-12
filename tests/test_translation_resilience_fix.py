@@ -67,7 +67,10 @@ class TranslationResilienceFixTests(unittest.TestCase):
         )
 
         self.assertIs(actual, expected)
-        base_client.with_options.assert_called_once_with(max_retries=0)
+        options = base_client.with_options.call_args.kwargs
+        self.assertEqual(options["max_retries"], 0)
+        self.assertEqual(options["timeout"].connect, 30.0)
+        self.assertEqual(options["timeout"].read, 600.0)
         create.assert_called_once()
         llm_module.log_llm_response.assert_called_once_with(expected)
 

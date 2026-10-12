@@ -224,6 +224,13 @@ def _validate_effective_settings(settings: dict[str, Any], mode: str) -> None:
             raise ProjectConfigError(
                 "配置项必须是不小于 1 的数字: translation_batching.output_reserve_ratio"
             )
+        for name in (
+            "translation_batching.request_timeout_seconds",
+            "translation_batching.connect_timeout_seconds",
+        ):
+            value = get_value(settings, name)
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+                raise ProjectConfigError(f"配置项必须是正数: {name}")
         if get_value(settings, "translation_batching.reasoning_effort") != "none":
             raise ProjectConfigError("批处理视频级翻译必须关闭 DeepSeek 思考模式")
     managed_paths = (

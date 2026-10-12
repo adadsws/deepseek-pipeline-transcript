@@ -76,6 +76,8 @@ class ProjectConfigTests(unittest.TestCase):
         self.assertEqual(batch["translation_batching"]["max_input_tokens"], 120000)
         self.assertEqual(batch["translation_batching"]["max_output_tokens"], 120000)
         self.assertEqual(batch["translation_batching"]["output_reserve_ratio"], 2.0)
+        self.assertEqual(batch["translation_batching"]["request_timeout_seconds"], 600.0)
+        self.assertEqual(batch["translation_batching"]["connect_timeout_seconds"], 30.0)
         self.assertNotIn("incomplete_response_attempts", batch["translation_batching"])
         self.assertNotIn("round_end_retry_menu", batch["interaction"])
         self.assertNotIn("default_retry_choice", batch["interaction"])
