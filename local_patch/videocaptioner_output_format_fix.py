@@ -3,7 +3,7 @@
 The upstream full workflow always emits both ``<video>.srt`` and
 ``<video>.ass``, although its transcription settings offer a single output
 format.  This module is intentionally outside the isolated upstream checkout.
-It is loaded through ``sitecustomize.py`` by ``start.bat``.
+It is installed through ``sitecustomize.py`` when the project patch path is active.
 """
 
 from __future__ import annotations

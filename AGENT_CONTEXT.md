@@ -2,7 +2,7 @@
 
 ## 结构
 
-- `start.bat`：GUI 入口；通过 `local_patch/sitecustomize.py` 加载项目补丁。
+- `start.bat`：原 GUI 启动入口；项目不再使用，已移入 `~archive/20261019-112752-unused-gui-launcher/`。
 - `batch_videos.bat`：无界面批处理入口。
 - `scripts/headless_batch.py`：批量枚举、处理、进度、校验与报告编排。
 - `config/batch/settings.toml`、`config/gui/settings.toml`、`config/shared/settings.toml`：三层规范配置；模式层字段成对，未改写项只放 shared。
