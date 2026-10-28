@@ -1,5 +1,10 @@
 # 变更日志
 
+## 2026-10-22
+
+- 补齐英文 `README_EN.md`，并为中英文 README 添加双向语言链接；明确本机个人覆盖配置不纳入 Git。
+- 澄清空的 `docs/plans/` 不要求新建 Plan；归档一次不必要的计划及其复盘。
+
 ## 2026-10-19
 
 - 项目不再使用 GUI 启动入口，将根目录的 `start.bat` 归档至 `~archive/20261019-112752-unused-gui-launcher/`；批处理入口 `batch_videos.bat` 继续使用。

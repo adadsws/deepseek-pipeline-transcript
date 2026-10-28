@@ -1,5 +1,7 @@
 # [Whisper 转录 + DeepSeek 翻译] 流水线地制作字幕
 
+[简体中文](README.md) | [English](README_EN.md)
+
 自动识别和翻译视频语音，并把 `.srt` 字幕保存到原视频旁边。支持一次处理单个视频或整个文件夹。
 
 ## 首次安装

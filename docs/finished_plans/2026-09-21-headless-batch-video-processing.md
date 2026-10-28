@@ -99,6 +99,7 @@ flowchart LR
 - DeepSeek 临时短句真实调用成功，Key 在控制台完全省略。
 - 用户指定视频一：原始与最终均为 136 个有效 cue，最终 SRT 12,523 字节。
 - 用户指定视频二：原始与最终均为 12 个有效 cue，最终 SRT 1,022 字节。
+- 历史项目上下文另记录：用户提供但未纳入仓库的约 20 分钟与 51 分钟 MP4，曾通过共用 FasterWhisper medium/CUDA 生成有效 SRT；此处保留原记录，未在本次文档整理中重跑。
 - `git-crypt` 暂存态审计：`PASS: real=1; examples=1; failures=0`。
 
 ## 用户确认结果
