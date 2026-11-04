@@ -1054,12 +1054,14 @@ def _prepare_shared_runtime() -> None:
     if local_patch not in sys.path:
         sys.path.insert(0, local_patch)
     from videocaptioner_logging_fix import install as install_logging_fix
+    from videocaptioner_audio_conversion_fix import install as install_audio_conversion_fix
     from videocaptioner_request_logger_fix import install as install_request_logger_fix
     from videocaptioner_translation_resilience_fix import (
         install as install_translation_resilience_fix,
     )
 
     install_logging_fix()
+    install_audio_conversion_fix()
     install_request_logger_fix()
     install_translation_resilience_fix()
     from videocaptioner.core.utils import cache as cache_utils
@@ -1376,9 +1378,28 @@ def _process_downstream_video(
             ),
             result.token_usage,
         )
-        result.final_sentence_count = validate_bilingual_output(
-            prepared.source_srt, prepared.translated_srt
-        )
+        try:
+            result.final_sentence_count = validate_bilingual_output(
+                prepared.source_srt, prepared.translated_srt
+            )
+        except StageError as exc:
+            if exc.stage != "translate" or "翻译前后句数不一致" not in str(exc):
+                raise
+            progress.update(95, "成品字幕缺句，重新翻译一次")
+            from videocaptioner_translation_resilience_fix import fresh_translation_attempt
+
+            with fresh_translation_attempt():
+                _run_translation(
+                    prepared.video, prepared.source_srt, prepared.translated_srt,
+                    prepared.config, api_key,
+                    lambda value, message: progress.update(
+                        55 + int(value * 0.4), f"翻译重试：{message}"
+                    ),
+                    result.token_usage,
+                )
+            result.final_sentence_count = validate_bilingual_output(
+                prepared.source_srt, prepared.translated_srt
+            )
         progress.update(97, "校验并发布")
         credited_srt = prepared.translated_srt.with_name("credited.srt")
         real_cue_count, intro_added = write_srt_with_intro(

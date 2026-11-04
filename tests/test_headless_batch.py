@@ -360,7 +360,7 @@ class HeadlessBatchTests(unittest.TestCase):
             batch.shutil, "get_terminal_size", return_value=terminal_size
         ):
             progress = batch.ConsoleProgress(290)
-            current = progress.begin(70, Path(r"V:\folder\FC2PPV-4588403-1.mp4"))
+            current = progress.begin(70, Path(r"V:\folder\sample-long-name-1.mp4"))
             current.update(
                 55,
                 "源字幕后处理完成（1498 → 1447 句，删除连续重复 51、"
@@ -373,7 +373,7 @@ class HeadlessBatchTests(unittest.TestCase):
             batch._display_width(state.rendered_lines[0]),
             terminal_size.columns - batch.CONSOLE_WRAP_SAFETY_COLUMNS,
         )
-        self.assertIn("FC2PPV-4588403-1.mp4", state.rendered_lines[0])
+        self.assertIn("sample-long-name-1.mp4", state.rendered_lines[0])
 
     def test_summary_is_compact_and_only_lists_error_files(self) -> None:
         success = batch.VideoResult(video="ok.mp4", status="success", final_sentence_count=3)
@@ -798,6 +798,37 @@ class HeadlessBatchTests(unittest.TestCase):
             published = Path(result.output).read_text(encoding="utf-8")
             self.assertIn("字幕制作：github.com/adadsws", published)
             self.assertIn("00:00:00,000 --> 00:00:03,000", published)
+
+    def test_missing_output_cue_retries_translation_once(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_name:
+            video = Path(temp_name) / "sample.mp4"
+            video.write_bytes(b"video")
+            progress = batch.ConsoleProgress(1)
+            progress.begin(1, video)
+
+            def fake_transcribe(_video, output, _config, _progress):
+                output.write_text(
+                    "1\n00:00:05,000 --> 00:00:06,000\n原文一\n\n"
+                    "2\n00:00:07,000 --> 00:00:08,000\n原文二\n", encoding="utf-8"
+                )
+
+            def fake_translate(_video, _source, output, _config, _key, _progress, _usage):
+                count = translate.call_count
+                content = "1\n00:00:05,000 --> 00:00:06,000\n译文一\n原文一\n"
+                if count == 2:
+                    content += "\n2\n00:00:07,000 --> 00:00:08,000\n译文二\n原文二\n"
+                output.write_text(content, encoding="utf-8")
+
+            with mock.patch.object(batch, "_run_transcription", side_effect=fake_transcribe), mock.patch.object(
+                batch, "_run_translation", side_effect=fake_translate
+            ) as translate:
+                result = batch.process_video(
+                    video, batch.BatchConfig("ja", "zh-Hans"), "secret", progress, overwrite=False
+                )
+            progress.finish_line()
+            self.assertEqual(result.status, "success", result.errors)
+            self.assertEqual(result.final_sentence_count, 2)
+            self.assertEqual(translate.call_count, 2)
 
     def test_video_group_pipelines_direct_single_transcription_with_translation(self) -> None:
         videos = [Path(f"video-{index}.mp4") for index in range(1, 4)]

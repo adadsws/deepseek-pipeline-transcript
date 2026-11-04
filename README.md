@@ -32,6 +32,12 @@ py -3.12 -m venv .venv
 
 文件夹会自动递归扫描。处理成功后，每个视频旁会出现同名 `.srt` 字幕。
 
+## 工具
+
+| 工具 | 用途 | 入口 | 环境配置 |
+|---|---|---|---|
+| [媒体损坏检查](tools/media_check/README.md) | 递归检查视频、音频和图片，报告损坏区间。 | `python -m tools.media_check` 或 `tools/check_media.bat` | Python 3.12、Pillow；音视频另需 FFmpeg |
+
 ## 修改语言
 
 在 `config/batch/settings.toml` 中设置视频语言和字幕语言：

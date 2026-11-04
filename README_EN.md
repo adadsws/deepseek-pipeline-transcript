@@ -32,6 +32,12 @@ Do not publish or commit your DeepSeek API key in plaintext.
 
 Folders are scanned recursively. On success, each video gets a matching `.srt` file beside it.
 
+## Tools
+
+| Tool | Purpose | Entry point | Requirements |
+|---|---|---|---|
+| [Media damage checker](tools/media_check/README_EN.md) | Recursively check video, audio and images; report damaged ranges. | `python -m tools.media_check` or `tools/check_media.bat` | Python 3.12, Pillow; FFmpeg for audio/video |
+
 ## Change languages
 
 Set the source and subtitle languages in `config/batch/settings.toml`:

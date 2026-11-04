@@ -4,6 +4,7 @@
 
 - `start.bat`：原 GUI 启动入口；项目不再使用，已移入 `~archive/20261019-112752-unused-gui-launcher/`。
 - `batch_videos.bat`：无界面批处理入口。
+- `tools/check_media.bat`、`python -m tools.media_check`：媒体文件或目录的独立错误检查入口；JSON 报告写入 `~outputs-final/media-check-reports/`。
 - `scripts/headless_batch.py`：批量枚举、处理、进度、校验与报告编排。
 - `config/batch/settings.toml`、`config/gui/settings.toml`、`config/shared/settings.toml`：三层规范配置；模式层字段成对，未改写项只放 shared。
 - `local_patch/videocaptioner_project_config.py`：配置合并、校验、路径解析及 GUI QConfig 临时 JSON 生成。
@@ -44,11 +45,15 @@
 | 三层 TOML 与 GUI QConfig 兼容 | `videocaptioner_project_config.py`、`videocaptioner_gui_config_bridge.py` | 原单用途路径补丁已归档，统一为一个配置桥 |
 | DeepSeek secret 注入 | `videocaptioner_shared_secret.py` | 临时 JSON 不含 Key，只在实际任务/连接测试时读取 |
 | GUI 输出格式修复 | `videocaptioner_output_format_fix.py` | 上游仍会生成多格式，保留最小钩子和回归测试 |
+| 媒体数据错误检查 | `videocaptioner_media_checker.py`、`tools/media_check/__main__.py` | FFmpeg/Pillow 解码并报告损坏区间；独立入口与音频回退共用 |
+| 异常声道布局的音频转换回退 | `videocaptioner_audio_conversion_fix.py` | 上游转换失败后检查所选音轨；有限坏段等长静音，其他情况尝试显式首声道，不改上游源码 |
 | Windows 日志轮转修复 | `videocaptioner_logging_fix.py` | 与请求日志分责，保持幂等安装 |
 | 并发请求/响应日志配对 | `videocaptioner_request_logger_fix.py` | 上游全局队列和任务上下文无法支持多视频并发，保留 HTTP 请求对象关联与线程隔离上下文 |
 | 视频级请求、空响应、缓存和纯标点修复 | `videocaptioner_translation_resilience_fix.py` | 成为批处理翻译策略和完整性校验的唯一适配点；不改上游源码 |
 | VAD 关闭后的损坏 cue 与连续重复清理 | `videocaptioner_asr_cleanup.py` | 独立纯函数后处理，只由批处理编排调用；删除含 `U+FFFD` 或反向时间轴的 cue，连续相同组保留第一条，不改转录线程或上游源码 |
 | 运行资源目录分流 | `scripts/prepare_runtime.py` | 只维护 Junction，不改上游路径常量或源码 |
+
+- 已知限制：坏段静音后，Faster Whisper 仍可能在静音区生成字幕。一次完整重跑中，仍有 cue 完全落在静音区；现有发布校验保证结构和句数，不证明这些 cue 的内容来自源语音。
 
 固定上游目录必须保持 Git clean。每个保留补丁均要求幂等安装和独立回归测试；上游修复对应缺口后再归档项目补丁。
 - `local_patch/videocaptioner_request_logger_fix.py` 在 HTTP 响应钩子中按 `response.request` 记录 DeepSeek 请求与响应；响应体读取中断时记录并原样抛出网络异常，禁止访问未读取的 `response.text` 覆盖真正原因。
@@ -61,3 +66,14 @@
 ## 验证入口
 
 - 纯本地回归测试：运行 `python -m unittest discover -s tests -p "test_*.py"`，覆盖批处理、配置、日志及本地补丁。各任务的具体样例、验收标准与验证结果记录在对应 Plan 中。
+
+## 项目评测集
+
+下表约定代表性输入、过程和结果。真实样例来自已完成计划及回归测试；预测样例用于覆盖边界，不表示已在真实媒体中发生。每次相关行为改变时，更新样例与验收证据。当前自动验证入口为 `python -m unittest discover -s tests -p "test_*.py"`；完整媒体流程仍需按任务计划使用真实输入验收。
+
+| 来源 | 输入及前置状态 | 预期行为（过程） | 预期输出（结果） | 判定证据 |
+|---|---|---|---|---|
+| 真实：`20261104-media-check-subtool` 计划 | 正常、截断及不支持的媒体文件 | 通过 `python -m tools.media_check` 独立检查并写入报告；不启动字幕流水线 | 正常返回 0、损坏返回 1、不支持返回 2，报告标明对应状态 | `tests/test_media_checker.py`；计划中的实际入口记录 |
+| 真实：批处理回归 | 含空白、损坏 cue 或重复字幕的源 SRT | 先清理和重新编号，再进行翻译与发布校验；失败不得发布残缺 SRT | 有效 cue 连续编号；无有效 cue 时记录 `invalid_or_blank_srt` | `tests/test_asr_cleanup.py`、`tests/test_headless_batch.py` |
+| 预测：无 DeepSeek Key 的已有 SRT | 视频旁已有合法同名 SRT，未传 `--overwrite` | 严格检查已有 SRT 并仅处理片头署名，不启动转录或翻译 | 最终 SRT 有效且没有重复署名 | `tests/test_headless_batch.py`；真实入口按需补验 |
+| 预测：翻译响应缺键或空译文 | 首次 DeepSeek 响应不完整 | 只执行规定的一次完整上下文修复，并严格校验修复响应 | 合格时发布完整双语 SRT；仍不合格时记录失败且不发布 | `tests/test_translation_resilience_fix.py`；真实 API 情形需另验 |

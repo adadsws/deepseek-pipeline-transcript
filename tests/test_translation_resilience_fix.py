@@ -36,12 +36,17 @@ def response(content: str | None, finish_reason: str = "stop") -> object:
 
 
 class TranslationResilienceFixTests(unittest.TestCase):
+    def test_batch_treats_numeric_sentence_cues_as_sentence_level(self) -> None:
+        with mock.patch.object(resilience, "_batch_video_translation_active", return_value=True):
+            self.assertFalse(resilience.batch_sentence_level_timestamp(lambda: True))
+        with mock.patch.object(resilience, "_batch_video_translation_active", return_value=False):
+            self.assertTrue(resilience.batch_sentence_level_timestamp(lambda: True))
     def test_batch_request_options_disable_thinking_and_bound_json_output(self) -> None:
         options = resilience.batch_video_request_options()
         self.assertEqual(options["reasoning_effort"], "none")
         self.assertEqual(options["extra_body"], {"thinking": {"type": "disabled"}})
         self.assertEqual(options["response_format"], {"type": "json_object"})
-        self.assertEqual(options["max_tokens"], 120000)
+        self.assertEqual(options["max_tokens"], 256000)
         self.assertIn("json", resilience.ensure_json_instruction("output dictionary").lower())
         existing = "Output valid JSON"
         self.assertEqual(resilience.ensure_json_instruction(existing), existing)
@@ -143,7 +148,8 @@ class TranslationResilienceFixTests(unittest.TestCase):
         call = mock.Mock(
             side_effect=[
                 response('{"1":"译文一"}'),
-                response('{"2":"译文二"}'),
+                response('{"2":""}'),
+                response('{"2":""}'),
             ]
         )
 
@@ -151,7 +157,7 @@ class TranslationResilienceFixTests(unittest.TestCase):
             missing = [key for key in expected if key not in actual]
             return (not missing, f"Missing keys {missing}")
 
-        with self.assertRaisesRegex(ValueError, "after one complete repair request"):
+        with self.assertRaisesRegex(ValueError, "after complete and targeted repairs"):
             resilience.request_complete_video_translation(
                 call,
                 validate,
@@ -162,6 +168,42 @@ class TranslationResilienceFixTests(unittest.TestCase):
                 allow_repair=True,
             )
 
+        self.assertEqual(call.call_count, 3)
+
+    def test_targeted_repair_fills_keys_empty_in_both_complete_responses(self) -> None:
+        subtitles = {"1": "原文一", "2": "原文二"}
+        call = mock.Mock(side_effect=[
+            response('{"1":"译文一","2":""}'),
+            response('{"1":"译文一","2":""}'),
+            response('{"2":"译文二"}'),
+        ])
+
+        def validate(actual, expected):
+            missing = [key for key in expected if not str(actual.get(key, "")).strip()]
+            return not missing, f"Empty keys {missing}"
+
+        actual = resilience.request_complete_video_translation(
+            call, validate, system_prompt="Output JSON", subtitle_dict=subtitles,
+            model="deepseek-flash", request_options={}, allow_repair=True,
+        )
+        self.assertEqual(actual, {"1": "译文一", "2": "译文二"})
+        self.assertEqual(call.call_count, 3)
+        self.assertEqual(call.call_args_list[2].kwargs["messages"][1]["content"],
+                         '{"1": "原文一", "2": "原文二"}')
+
+    def test_complementary_responses_recover_missing_keys(self) -> None:
+        subtitles = {"1": "原文一", "2": "原文二"}
+        call = mock.Mock(side_effect=[response('{"1":"译文一"}'), response('{"2":"译文二"}')])
+
+        def validate(actual, expected):
+            missing = [key for key in expected if not str(actual.get(key, "")).strip()]
+            return not missing, f"Missing keys {missing}"
+
+        actual = resilience.request_complete_video_translation(
+            call, validate, system_prompt="Output JSON", subtitle_dict=subtitles,
+            model="deepseek-flash", request_options={}, allow_repair=True,
+        )
+        self.assertEqual(actual, {"1": "译文一", "2": "译文二"})
         self.assertEqual(call.call_count, 2)
 
     def test_valid_first_response_does_not_send_repair_request(self) -> None:

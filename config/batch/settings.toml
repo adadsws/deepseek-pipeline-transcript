@@ -79,9 +79,9 @@ deeplx_endpoint = ""
 [translation_batching]
 max_in_flight = 5
 video_concurrency = 4
-max_input_tokens = 120000
-# deepseek-flash 当前支持更大的输出；配合 2 倍余量，将整段字幕安全预算提高到约 60K。
-max_output_tokens = 120000
+max_input_tokens = 300000
+# deepseek-flash 文档标注 1M 上下文、384K 最大输出；保留余量，整段字幕预算约 128K。
+max_output_tokens = 256000
 output_reserve_ratio = 2.0
 reasoning_effort = "none"
 request_timeout_seconds = 600.0

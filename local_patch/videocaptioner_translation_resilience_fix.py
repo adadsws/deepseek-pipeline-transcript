@@ -8,6 +8,7 @@ import logging
 import math
 import os
 import threading
+import uuid
 from contextlib import contextmanager
 from typing import Callable
 
@@ -45,6 +46,18 @@ _CONNECT_TIMEOUT_SECONDS = float(
 )
 _VIDEO_BATCH_CACHE_VERSION = "full-video-v2"
 _usage_context = threading.local()
+_retry_context = threading.local()
+
+
+@contextmanager
+def fresh_translation_attempt():
+    """仅对当前重试使用独立缓存键，避免复用首次缺句结果。"""
+    previous = getattr(_retry_context, "nonce", "")
+    _retry_context.nonce = uuid.uuid4().hex
+    try:
+        yield
+    finally:
+        _retry_context.nonce = previous
 
 
 class EmptyLLMResponseError(ValueError):
@@ -55,6 +68,13 @@ def _batch_video_translation_active() -> bool:
     return _VIDEO_LEVEL_TRANSLATION and os.environ.get(
         "VIDEOCAPTIONER_EXECUTION_MODE"
     ) == "batch"
+
+
+def batch_sentence_level_timestamp(original: Callable[[], bool]) -> bool:
+    """批处理转录固定使用句级时间戳，避免数字字幕被误判为词级。"""
+    if _batch_video_translation_active():
+        return False
+    return original()
 
 
 def batch_video_request_options() -> dict[str, object]:
@@ -204,8 +224,54 @@ def request_complete_video_translation(
     )
     if repaired_dict is not None:
         return repaired_dict
+    # 两次响应可互补；少量仍空的键再定向补译，始终携带完整原输入。
+    try:
+        first_parts = json_repair.loads(first_content)
+        repair_parts = json_repair.loads(_repaired_content)
+        if isinstance(first_parts, dict) and isinstance(repair_parts, dict):
+            combined = {}
+            for key in subtitle_dict:
+                for parts in (repair_parts, first_parts):
+                    value = parts.get(key)
+                    if value is not None and str(value).strip():
+                        combined[key] = value
+                        break
+            valid, _ = validate(combined, subtitle_dict)
+            if valid:
+                return combined
+            unresolved = [
+                key for key in subtitle_dict
+                if key not in combined or not str(combined[key]).strip()
+            ]
+            if unresolved:
+                targeted_response = call(
+                    messages=initial_messages + [{
+                        "role": "user",
+                        "content": (
+                            "Translate only these unresolved subtitle keys: "
+                            f"{json.dumps(unresolved)}. Use the complete original input above "
+                            "for context. Return a JSON object with exactly these keys and "
+                            "nonempty translations; do not merge or omit entries."
+                        ),
+                    }],
+                    model=model,
+                    **request_options,
+                )
+                targeted = json_repair.loads(
+                    str(targeted_response.choices[0].message.content or "").strip()
+                )
+                if isinstance(targeted, dict):
+                    for key in unresolved:
+                        value = targeted.get(key)
+                        if value is not None and str(value).strip():
+                            combined[key] = value
+                    valid, _ = validate(combined, subtitle_dict)
+                    if valid:
+                        return combined
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
     raise ValueError(
-        "DeepSeek response validation failed after one complete repair request: "
+        "DeepSeek response validation failed after complete and targeted repairs: "
         f"first response: {first_error}; repair response: {repair_error}"
     )
 
@@ -332,6 +398,13 @@ def install() -> None:
     from videocaptioner.core.translate.base import BaseTranslator
     from videocaptioner.core.translate import llm_translator as llm_translator_module
     from videocaptioner.core.translate.llm_translator import LLMTranslator
+
+    original_is_word_timestamp = ASRData.is_word_timestamp
+
+    def sentence_level_batch_timestamp(self: ASRData) -> bool:
+        return batch_sentence_level_timestamp(lambda: original_is_word_timestamp(self))
+
+    ASRData.is_word_timestamp = sentence_level_batch_timestamp
 
     def validated_call_llm_api(
         messages: list[dict],
@@ -461,7 +534,7 @@ def install() -> None:
             f"{key}:{_VIDEO_BATCH_CACHE_VERSION}:{_REASONING_EFFORT}:"
             f"{_MAX_INPUT_TOKENS}:{_MAX_OUTPUT_TOKENS}:{_OUTPUT_RESERVE_RATIO:g}:"
             "one-complete-repair:"
-            f"{prompt_fingerprint}"
+            f"{prompt_fingerprint}:{getattr(_retry_context, 'nonce', '')}"
         )
 
     LLMTranslator._get_cache_key = versioned_video_cache_key
