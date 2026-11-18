@@ -13,8 +13,11 @@
 - `secrets/deepseek-api-key.txt`：GUI 与批处理共用的真实 DeepSeek Key；工作区为明文，Git index/commit 必须是 `git-crypt` 密文。
 - `reference/upstream/VideoCaptioner/`：固定的上游源码及共用模型/运行资源。
 - `local_patch/`：不直接修改上游代码的本地运行补丁。
+- `local_patch/videocaptioner_video_formats.py`：从 shared 配置统一视频扩展名，运行时适配上游枚举、CLI 校验和播放器拖入；播放器补丁延迟到其原生导入时安装，不提前加载可选 VLC 依赖。
 
 ## 约定
+
+- 视频候选扩展名统一在 `config/shared/settings.toml` 的 `input.video_extensions` 中维护；各模式不复制默认列表。批处理普通格式按后缀匹配，歧义后缀（DAT/MOD 及 PotPlayer 视频组中与音频、播放列表、光盘索引共用的类型）先确认文件内真实视频流，排除封面与引用文件，探测禁用网络协议。完整 PotPlayer 来源快照为 `data/video-formats/potplayer-20261118.json`，评测必须覆盖其完整集合，不以手挑子集代替。`--scan-only` 经过实际 BAT 入口，仅扫描计数，不准备模型、读取密钥、调用 GPU/ASR/API 或写入素材。
 
 - GUI 与批处理都读取 shared，再读取自己的模式覆盖层；模式层不得跨读，真实密钥继续独立读取。
 - GUI 仅在创建 DeepSeek 任务或测试 DeepSeek 连接时读取共享 Key，不把它写回 `settings.json`。
@@ -75,5 +78,8 @@
 |---|---|---|---|---|
 | 真实：`20261104-media-check-subtool` 计划 | 正常、截断及不支持的媒体文件 | 通过 `python -m tools.media_check` 独立检查并写入报告；不启动字幕流水线 | 正常返回 0、损坏返回 1、不支持返回 2，报告标明对应状态 | `tests/test_media_checker.py`；计划中的实际入口记录 |
 | 真实：批处理回归 | 含空白、损坏 cue 或重复字幕的源 SRT | 先清理和重新编号，再进行翻译与发布校验；失败不得发布残缺 SRT | 有效 cue 连续编号；无有效 cue 时记录 `invalid_or_blank_srt` | `tests/test_asr_cleanup.py`、`tests/test_headless_batch.py` |
+| 真实：用户目录中的 M2T/MTS/M2TS/MOV/MXF 等 | 混合大小写、中文/空格/`%` 路径，另含非视频 DAT | 实际 BAT 仅扫描，新增格式不遗漏，DAT 先确认视频流 | 识别 1,095 个视频，其中 M2T 4 个；不进入转录、翻译或修改素材 | `tests/test_video_formats.py`；[任务记录](finished_plans/2026-11-18-video-extensions.md) |
+| 真实来源 + 预测文件：PotPlayer 完整格式复核 | DLL 视频扩展名组 52 项及语言资源关联 34 项（合并 58 项）；8 个新增后缀视频内容样例与 9 个音频/封面/引用/索引样例 | 全集合核对；歧义后缀检查内容，不跟随引用，不因封面误判视频 | 58 项全部在候选集合内；8 个视频内容样例计入，9 个非视频样例排除 | `data/video-formats/potplayer-20261118.json`、`tests/test_video_formats.py`；实际 BAT 记录见同一任务 Plan |
+| 预测：格式入口一致性 | 扩展列表、已加载枚举引用、重复安装、播放器拖入 | 统一枚举与校验器；保持路径大小写；延迟适配播放器，不提前引入 VLC | 格式集合一致，补丁幂等，字幕拖入行为保留 | `tests/test_video_formats.py`；原生 GUI 点击和逐格式解码需另验 |
 | 预测：无 DeepSeek Key 的已有 SRT | 视频旁已有合法同名 SRT，未传 `--overwrite` | 严格检查已有 SRT 并仅处理片头署名，不启动转录或翻译 | 最终 SRT 有效且没有重复署名 | `tests/test_headless_batch.py`；真实入口按需补验 |
 | 预测：翻译响应缺键或空译文 | 首次 DeepSeek 响应不完整 | 只执行规定的一次完整上下文修复，并严格校验修复响应 | 合格时发布完整双语 SRT；仍不合格时记录失败且不发布 | `tests/test_translation_resilience_fix.py`；真实 API 情形需另验 |

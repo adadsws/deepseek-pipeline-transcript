@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tomllib
 from copy import deepcopy
 from pathlib import Path
@@ -190,6 +191,12 @@ def _validate_effective_settings(settings: dict[str, Any], mode: str) -> None:
     missing = [name for name in required if get_value(settings, name) is None]
     if missing:
         raise ProjectConfigError(f"{mode} 有效配置缺少: {', '.join(missing)}")
+    extensions = get_value(settings, "input.video_extensions")
+    if not isinstance(extensions, list) or not extensions or any(
+        not isinstance(item, str) or not re.fullmatch(r"\.[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*", item)
+        for item in extensions
+    ):
+        raise ProjectConfigError("input.video_extensions 必须是非空的带点扩展名列表")
     for name in ("language.video.source", "language.video.target"):
         value = get_value(settings, name)
         if not isinstance(value, str) or not value.strip():

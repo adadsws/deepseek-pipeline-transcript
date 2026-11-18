@@ -1,5 +1,9 @@
 """Automatically load project-owned VideoCaptioner runtime adjustments."""
 
+from videocaptioner_video_formats import install as install_video_formats
+
+install_video_formats()
+
 from videocaptioner_gui_config_bridge import install as install_gui_config_bridge
 from videocaptioner_audio_conversion_fix import install as install_audio_conversion_fix
 from videocaptioner_logging_fix import install as install_logging_fix

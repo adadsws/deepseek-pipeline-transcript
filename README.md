@@ -32,6 +32,14 @@ py -3.12 -m venv .venv
 
 文件夹会自动递归扫描。处理成功后，每个视频旁会出现同名 `.srt` 字幕。
 
+视频扩展名不区分大小写，覆盖 MP4、MTS、M2TS、M2T、MOV、MXF、3GP、OGV 等格式；完整候选列表位于 `config/shared/settings.toml` 的 `input.video_extensions`。DAT、MOD、M4B、M4P、RAM、RPM、IFO、ASX、WMX、WVX 有多种用途，扫描时仅接受文件内的真实视频流，排除纯音频及封面、播放列表和 DVD 索引，不跟随网络链接。能否解码及转录取决于实际文件与 FFmpeg。
+
+只查看扫描数量、不开始处理时，在 PowerShell 运行：
+
+```powershell
+.\batch_videos.bat "视频文件或文件夹路径" --scan-only
+```
+
 ## 工具
 
 | 工具 | 用途 | 入口 | 环境配置 |

@@ -46,6 +46,7 @@ from videocaptioner_asr_cleanup import (  # noqa: E402
     clean_source_srt_file,
     validate_source_srt_file,
 )
+from videocaptioner_video_formats import is_video_file  # noqa: E402
 
 
 # 所有运行参数只从三层 TOML 读取；这些模块常量只是本进程的配置快照。
@@ -340,11 +341,12 @@ def discover_videos(path: Path) -> list[Path]:
     """按稳定顺序枚举单个视频或目录下的全部视频。"""
     path = path.expanduser().resolve(strict=False)
     if path.is_file():
-        return [path] if path.suffix.lower() in VIDEO_EXTENSIONS else []
+        return [path] if is_video_file(path, VIDEO_EXTENSIONS, str(SHARED_FFMPEG_DIR / "ffmpeg.exe")) else []
     if not path.is_dir():
         raise FileNotFoundError(f"路径不存在: {path}")
     return sorted(
-        (item for item in path.rglob("*") if item.is_file() and item.suffix.lower() in VIDEO_EXTENSIONS),
+        (item for item in path.rglob("*") if item.is_file()
+         and is_video_file(item, VIDEO_EXTENSIONS, str(SHARED_FFMPEG_DIR / "ffmpeg.exe"))),
         key=lambda item: str(item).casefold(),
     )
 
@@ -1694,6 +1696,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="无界面批量处理目录中的全部视频")
     parser.add_argument("path", nargs="?", help="视频文件或包含视频的目录")
     parser.add_argument("--overwrite", action="store_true", help="覆盖视频旁已有的同名 SRT")
+    parser.add_argument("--scan-only", action="store_true", help="仅扫描并统计视频，不转录、翻译或修改素材")
     return parser.parse_args(argv)
 
 
@@ -1861,6 +1864,19 @@ def _interactive_main(overwrite: bool) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
+    if args.scan_only:
+        if not args.path:
+            print("错误：--scan-only 需要视频文件或目录路径", file=sys.stderr)
+            return 2
+        try:
+            videos = discover_videos(Path(args.path.strip().strip('"')))
+        except OSError as exc:
+            print(f"错误：{exc}", file=sys.stderr)
+            return 2
+        print(f"找到 {len(videos)} 个视频")
+        for suffix, count in sorted(Counter(video.suffix.lower() for video in videos).items()):
+            print(f"{suffix}: {count}")
+        return 0 if videos else 2
     if args.path:
         exit_code = _run_batch(args.path, args.overwrite, confirm=False)
         if get_value(EFFECTIVE_CONFIG, "interaction.pause_after_one_shot") and sys.stdin.isatty():

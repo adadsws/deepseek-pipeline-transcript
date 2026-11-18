@@ -36,19 +36,27 @@ def _probe(path: Path, ffprobe: str) -> dict:
     return json.loads(result.stdout)
 
 
-def _probe_with_ffmpeg(path: Path, ffmpeg: str) -> dict:
-    """项目运行时只有 ffmpeg.exe 时，复用其输入信息识别常见音视频。"""
-    result = subprocess.run([ffmpeg, "-hide_banner", "-i", str(path)], capture_output=True,
+def _probe_with_ffmpeg(
+    path: Path, ffmpeg: str, *, require_duration: bool = True, local_only: bool = False,
+) -> dict:
+    """复用 FFmpeg 输入信息；仅识别视频流时允许未提供时长的容器。"""
+    command = [ffmpeg, "-hide_banner"]
+    if local_only:
+        command += ["-protocol_whitelist", "file"]
+    result = subprocess.run([*command, "-i", str(path)], capture_output=True,
                             text=True, encoding="utf-8", errors="replace", timeout=30)
     duration_match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", result.stderr)
-    if not duration_match:
+    if not duration_match and require_duration:
         raise ValueError("ffmpeg 未提供可用媒体时长")
-    hours, minutes, seconds = duration_match.groups()
-    duration = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    duration = 0.0
+    if duration_match:
+        hours, minutes, seconds = duration_match.groups()
+        duration = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
     streams = [
-        {"index": int(index), "codec_type": kind.lower(), "codec_name": codec}
-        for index, kind, codec in re.findall(
-            r"Stream #0:(\d+)(?:\[[^]]*\])?(?:\([^)]*\))?:\s*(Video|Audio):\s*([^,\s]+)", result.stderr
+        {"index": int(index), "codec_type": kind.lower(), "codec_name": codec,
+         "disposition": {"attached_pic": int("attached pic" in details.lower())}}
+        for index, kind, codec, details in re.findall(
+            r"Stream #0:(\d+)(?:\[[^]]*\])?(?:\([^)]*\))?:\s*(Video|Audio):\s*([^,\s]+)([^\r\n]*)", result.stderr
         )
     ]
     return {"format": {"duration": duration}, "streams": streams}

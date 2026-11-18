@@ -1,5 +1,25 @@
 # 共用层：批处理未改写的上游设置、运行路径、缓存、日志与价格。
 
+# 视频候选扩展名：本机 PotPlayer 视频关联 + 既有格式 + 摄像机/裸视频流。
+# 与音频、播放列表或光盘索引共用的后缀先确认视频流，不导入其引用的媒体。
+[input]
+video_extensions = [
+    ".3g2", ".3gp", ".3gp2", ".3gpp", ".3gpp2", ".amv", ".asf", ".avi",
+    ".av1", ".bik", ".bk2", ".dat", ".dav", ".divx", ".dmskm", ".dpg",
+    ".drc", ".dv", ".dvr-ms", ".evo", ".f4v", ".flc", ".fli", ".flv",
+    ".gxf", ".h261", ".h263", ".h264", ".h265", ".hevc", ".ivf", ".k3g",
+    ".lmp4", ".m1v", ".m2p", ".m2t", ".m2ts", ".m2v", ".m4v", ".mj2",
+    ".mjpeg", ".mjpg", ".mk3d", ".mkv", ".mod", ".mov", ".mp2v", ".mp4",
+    ".mpe", ".mpeg", ".mpg", ".mpv", ".mpv2", ".mqv", ".mts", ".mxf",
+    ".nsr", ".nsv", ".nut", ".obu", ".ogm", ".ogv", ".ps", ".qt",
+    ".rec", ".rm", ".rmvb", ".roq", ".skm", ".svi", ".swf", ".thp",
+    ".tod", ".tp", ".tpr", ".trp", ".ts", ".vc1", ".vdr", ".viv",
+    ".vivo", ".vob", ".vro", ".webm", ".wm", ".wmp", ".wmv", ".wtv",
+    ".xvid", ".y4m", ".yuv",
+    # PotPlayer 内置视频列表及关联说明中的歧义类型，按内容确认。
+    ".asx", ".ifo", ".m4b", ".m4p", ".ram", ".rpm", ".wmx", ".wvx",
+]
+
 # 上游其他转录路线
 [transcription.whisper]
 model = "tiny"

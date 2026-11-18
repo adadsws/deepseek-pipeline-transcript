@@ -32,6 +32,14 @@ Do not publish or commit your DeepSeek API key in plaintext.
 
 Folders are scanned recursively. On success, each video gets a matching `.srt` file beside it.
 
+Video extensions are case-insensitive and include MP4, MTS, M2TS, M2T, MOV, MXF, 3GP and OGV. The complete candidate list is `input.video_extensions` in `config/shared/settings.toml`. DAT, MOD, M4B, M4P, RAM, RPM, IFO, ASX, WMX and WVX are probed for an actual video stream in the file. Audio-only files, cover art, playlists and DVD indexes are excluded; network links are not followed. Decoding and transcription depend on the file contents and FFmpeg.
+
+To view scan counts without starting processing, run in PowerShell:
+
+```powershell
+.\batch_videos.bat "path to video or folder" --scan-only
+```
+
 ## Tools
 
 | Tool | Purpose | Entry point | Requirements |

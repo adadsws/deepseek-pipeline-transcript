@@ -103,7 +103,6 @@ duration_seconds = 3.0
 
 # 偶尔修改：批处理输入格式；GUI 以空数组明确禁用。
 [input]
-video_extensions = [".mp4", ".webm", ".ogm", ".mov", ".mkv", ".avi", ".wmv", ".flv", ".m4v", ".ts", ".mpg", ".mpeg", ".vob", ".asf", ".rm", ".rmvb", ".m2ts", ".mts", ".dv", ".gxf", ".tod", ".mxf", ".f4v"]
 # 与 GUI 覆盖层保持键成对；批处理已固定为更新已有 SRT，不读取此兼容键。
 skip_existing_srt = false
 

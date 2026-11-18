@@ -59,9 +59,8 @@ enabled = false
 text = ""
 duration_seconds = 3.0
 
-# GUI 不使用批处理扫描策略。
+# 视频格式使用 shared 中的共用列表；以下保留 GUI 的处理策略。
 [input]
-video_extensions = []
 skip_existing_srt = false
 
 [interaction]
